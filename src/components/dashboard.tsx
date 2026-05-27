@@ -598,7 +598,11 @@ function GraphCard({
   useEffect(() => setOrigin(window.location.origin), []);
 
   const url = `${origin}/api/grass/${tracker.token}`;
-  const markdown = `![${tracker.name}](${url})`;
+  const snippets = [
+    { key: "md", label: "Markdown", hint: "README, Notion", value: `![${tracker.name}](${url})` },
+    { key: "html", label: "HTML", hint: "websites", value: `<img src="${url}" alt="${tracker.name}" />` },
+    { key: "url", label: "URL", hint: "raw image link", value: url },
+  ];
 
   async function copy(text: string, which: string) {
     try {
@@ -630,24 +634,70 @@ function GraphCard({
           </button>
         </div>
       </div>
-      <div className="p-4 space-y-3">
-        {tracker.enabled ? (
-          <div className="overflow-x-auto">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/grass/${tracker.token}`} alt={`${tracker.name} graph`} className="max-w-none" />
+
+      <div className="p-4 space-y-4">
+        {/* How it's configured */}
+        <div className="space-y-1.5 text-sm">
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="font-bold text-ink/50 w-14 shrink-0">Tags</span>
+            {(tracker.tags?.length ?? 0) === 0 ? (
+              <span className="text-ink/70">All routines</span>
+            ) : (
+              <span className="flex flex-wrap gap-1">
+                {tracker.tags.map((t) => (
+                  <span
+                    key={t}
+                    className="text-xs font-bold rounded-full border-2 border-ink bg-lime px-2 py-0.5"
+                  >
+                    #{t}
+                  </span>
+                ))}
+              </span>
+            )}
           </div>
-        ) : (
-          <p className="text-sm text-ink/50">Enable to preview and share.</p>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => copy(url, "url")} className="btn-brut text-xs">
-            {copied === "url" ? "Copied!" : "Copy URL"}
-          </button>
-          <button type="button" onClick={() => copy(markdown, "md")} className="btn-brut text-xs">
-            {copied === "md" ? "Copied!" : "Copy Markdown"}
-          </button>
+          <div className="flex gap-2 items-center">
+            <span className="font-bold text-ink/50 w-14 shrink-0">Doits</span>
+            <span className="text-ink/70">
+              {tracker.include_doits ? "Included" : "Not included"}
+            </span>
+          </div>
+          <div className="flex gap-2 items-center">
+            <span className="font-bold text-ink/50 w-14 shrink-0">Range</span>
+            <span className="text-ink/70">Last 12 months</span>
+          </div>
         </div>
-        <code className="block text-[11px] text-ink/60 break-all">{url}</code>
+
+        {/* How to use it elsewhere */}
+        <div className="space-y-2 border-t-2 border-ink/10 pt-3">
+          <p className="text-sm font-bold">Use it on another site</p>
+          <p className="text-xs text-ink/60">
+            Paste one of these wherever an image is allowed — it updates automatically.
+          </p>
+          {!tracker.enabled && (
+            <p className="text-xs font-bold text-coral">
+              This graph is disabled — the link won&apos;t render until you enable it.
+            </p>
+          )}
+          {snippets.map((s) => (
+            <div key={s.key}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-bold">
+                  {s.label} <span className="font-normal text-ink/40">· {s.hint}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copy(s.value, s.key)}
+                  className="btn-brut btn-ghost text-[11px] py-0.5"
+                >
+                  {copied === s.key ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <code className="block text-[11px] text-ink/70 bg-paper border-2 border-ink/15 rounded-md px-2 py-1.5 break-all">
+                {s.value}
+              </code>
+            </div>
+          ))}
+        </div>
       </div>
     </li>
   );
