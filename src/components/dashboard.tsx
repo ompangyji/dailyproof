@@ -12,7 +12,7 @@ import {
 } from "@/app/actions/templates";
 import { toggleLogToday } from "@/app/actions/logs";
 import { createDoit, deleteDoit, updateDoit } from "@/app/actions/doits";
-import { deleteImagesByUrl, diffRemoved } from "@/lib/supabase/upload";
+import { deleteImagesByUrl, diffRemoved, mediaSrc } from "@/lib/supabase/upload";
 import type {
   ActivityLog,
   ActivityTemplate,
@@ -349,7 +349,7 @@ export function Dashboard({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           key={`${u}-${i}`}
-                          src={u}
+                          src={mediaSrc(u)}
                           alt=""
                           className="h-14 w-14 object-cover rounded-md border-2 border-ink shrink-0"
                         />

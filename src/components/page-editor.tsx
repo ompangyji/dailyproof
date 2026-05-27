@@ -1,6 +1,6 @@
 "use client";
 
-import { EditorContent, useEditor } from "@tiptap/react";
+import { type Content, EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import LinkExt from "@tiptap/extension-link";
@@ -8,13 +8,15 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Image from "@tiptap/extension-image";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deleteLog } from "@/app/actions/logs";
 import { deletePage, savePage } from "@/app/actions/pages";
 import {
   deleteImagesByUrl,
   diffRemoved,
   extractImageUrls,
+  mediaSrc,
+  remapImageSrcs,
   uploadImage,
 } from "@/lib/supabase/upload";
 import { Lightbox } from "./lightbox";
@@ -65,10 +67,17 @@ export function PageEditor({
   const [viewer, setViewer] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Rewrite any legacy public-URL image srcs to the authenticated proxy form
+  // before the editor loads them, so old notes keep rendering after the
+  // bucket went private. New uploads already use the proxy form.
+  const content = useMemo(
+    () => remapImageSrcs(initialContent ?? "", mediaSrc) as Content,
+    [initialContent],
+  );
   // Snapshot of image URLs as of the most recent successful save. Used to
   // detect which images got removed from the editor since then, so we can
   // clean them out of Storage.
-  const savedImageUrlsRef = useRef<string[]>(extractImageUrls(initialContent));
+  const savedImageUrlsRef = useRef<string[]>(extractImageUrls(content));
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -91,7 +100,7 @@ export function PageEditor({
         HTMLAttributes: { class: "cursor-zoom-in", title: "Click to view" },
       }),
     ],
-    content: initialContent ?? "",
+    content,
     editorProps: {
       attributes: {
         class: "max-w-none focus:outline-none py-6",

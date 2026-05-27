@@ -9,7 +9,9 @@ const STEP = 0.5;
 
 function filenameFromUrl(u: string): string {
   try {
-    const name = new URL(u).pathname.split("/").pop();
+    // Handle both absolute URLs and relative paths like "/api/media/…".
+    const pathname = u.startsWith("http") ? new URL(u).pathname : u;
+    const name = pathname.split("?")[0].split("/").pop();
     return name ? decodeURIComponent(name) : "image";
   } catch {
     return "image";

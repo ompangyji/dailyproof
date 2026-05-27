@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { uploadImage, type UploadKind } from "@/lib/supabase/upload";
+import { mediaSrc, uploadImage, type UploadKind } from "@/lib/supabase/upload";
 import { Lightbox } from "./lightbox";
 
 type Props = {
@@ -61,9 +61,9 @@ export function ImageUploader({ kind, urls, onChange, max = 12 }: Props) {
           // eslint-disable-next-line @next/next/no-img-element
           <span key={`${u}-${i}`} className="relative inline-block group">
             <img
-              src={u}
+              src={mediaSrc(u)}
               alt=""
-              onClick={() => setViewer(u)}
+              onClick={() => setViewer(mediaSrc(u))}
               className="h-20 w-20 object-cover rounded-lg border-2 border-ink cursor-zoom-in"
               title="Click to view"
             />

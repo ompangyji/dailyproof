@@ -141,12 +141,13 @@ create policy "pages owner-only" on public.pages
   );
 
 -- =========================================================================
--- Storage: 사용자 업로드 이미지를 담을 공개 버킷 + 자기 폴더만 쓰기 RLS.
+-- Storage: 사용자 업로드 이미지를 담을 "비공개" 버킷 + 자기 폴더만 읽기/쓰기 RLS.
 -- 경로 규칙: <auth.uid()>/<kind>/<filename>
+-- 읽기는 /api/media 프록시 라우트가 사용자 세션으로 download 하므로 RLS가 게이트.
 -- =========================================================================
 insert into storage.buckets (id, name, public)
-values ('media', 'media', true)
-on conflict (id) do nothing;
+values ('media', 'media', false)
+on conflict (id) do update set public = false;
 
 drop policy if exists "media: insert own" on storage.objects;
 create policy "media: insert own" on storage.objects
@@ -156,9 +157,15 @@ create policy "media: insert own" on storage.objects
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 
+-- 자기 폴더의 파일만 읽기 (이전의 전체 공개 read 정책 대체)
 drop policy if exists "media: read public" on storage.objects;
-create policy "media: read public" on storage.objects
-  for select using (bucket_id = 'media');
+drop policy if exists "media: read own" on storage.objects;
+create policy "media: read own" on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'media'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
 
 drop policy if exists "media: update own" on storage.objects;
 create policy "media: update own" on storage.objects
