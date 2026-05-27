@@ -10,6 +10,11 @@ type Mode =
 
 type Props = {
   mode: Mode;
+  /** Account-synced custom color/tag library (from DB). */
+  customColors: string[];
+  customTags: string[];
+  onCustomColorsChange: (next: string[]) => void;
+  onCustomTagsChange: (next: string[]) => void;
   onClose: () => void;
   onCreate: (input: {
     title: string;
@@ -60,29 +65,15 @@ function normalizeHex(input: string): string | null {
   return (v.startsWith("#") ? v : `#${v}`).toLowerCase();
 }
 
-const CUSTOM_COLORS_KEY = "dailyproof:customColors";
+// The custom color/tag library now lives in the account (DB) and is passed in
+// as props; these caps just bound how much we keep client-side.
 const MAX_CUSTOM = 24;
+const MAX_CUSTOM_TAGS = 40;
 
-function loadCustomColors(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(CUSTOM_COLORS_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    return arr.filter((c): c is string => typeof c === "string" && !!normalizeHex(c));
-  } catch {
-    return [];
-  }
-}
-
-function saveCustomColors(list: string[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(list));
-  } catch {
-    // quota or privacy mode — ignore
-  }
+/** Strip leading #, collapse whitespace. Returns null if nothing is left. */
+function normalizeTag(raw: string): string | null {
+  const cleaned = raw.trim().replace(/^#+/, "").replace(/\s+/g, "");
+  return cleaned || null;
 }
 
 const SUGGESTED_EMOJI = [
@@ -95,7 +86,17 @@ const SUGGESTED_TAGS = [
   "workout", "study", "reading", "work", "hobby", "health", "morning", "evening",
 ];
 
-export function TemplateDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Props) {
+export function TemplateDialog({
+  mode,
+  customColors,
+  customTags,
+  onCustomColorsChange,
+  onCustomTagsChange,
+  onClose,
+  onCreate,
+  onUpdate,
+  onDelete,
+}: Props) {
   const initialTitle = mode.kind === "edit" ? mode.template.title : "";
   const initialColor =
     mode.kind === "edit" ? (mode.template.color ?? PALETTE[0]) : PALETTE[0];
@@ -111,22 +112,33 @@ export function TemplateDialog({ mode, onClose, onCreate, onUpdate, onDelete }: 
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [hexInput, setHexInput] = useState("");
   const [hexError, setHexError] = useState<string | null>(null);
-  const [customColors, setCustomColors] = useState<string[]>([]);
 
-  // Hydrate persisted custom colors. Also include the template's current color
-  // if it isn't already in PALETTE or customColors — so editing an old template
-  // doesn't lose its color from the row.
+  // When editing an existing routine, fold its own color/tags into the account
+  // library (once) so previously-used values show up as reusable swatches/chips.
   useEffect(() => {
-    const stored = loadCustomColors();
+    if (mode.kind !== "edit") return;
     const lc = (s: string) => s.toLowerCase();
-    const presetSet = new Set(PALETTE.map(lc));
-    const known = new Set([...presetSet, ...stored.map(lc)]);
-    const initial = [...stored];
-    if (mode.kind === "edit") {
-      const c = mode.template.color;
-      if (c && !known.has(lc(c))) initial.unshift(c.toLowerCase());
+    const c = mode.template.color;
+    if (
+      c &&
+      !PALETTE.some((p) => lc(p) === lc(c)) &&
+      !customColors.some((x) => lc(x) === lc(c))
+    ) {
+      onCustomColorsChange([...customColors, lc(c)].slice(-MAX_CUSTOM));
     }
-    setCustomColors(initial.slice(0, MAX_CUSTOM));
+    const presetTagSet = new Set(SUGGESTED_TAGS.map(lc));
+    const known = new Set(customTags.map(lc));
+    const missing: string[] = [];
+    for (const t of mode.template.tags ?? []) {
+      const n = normalizeTag(t);
+      if (n && !presetTagSet.has(lc(n)) && !known.has(lc(n))) {
+        known.add(lc(n));
+        missing.push(n);
+      }
+    }
+    if (missing.length) {
+      onCustomTagsChange([...customTags, ...missing].slice(-MAX_CUSTOM_TAGS));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -134,35 +146,35 @@ export function TemplateDialog({ mode, onClose, onCreate, onUpdate, onDelete }: 
     const norm = normalizeHex(c);
     if (!norm) return;
     const lc = (s: string) => s.toLowerCase();
-    if (PALETTE.some((p) => lc(p) === norm)) {
-      setColor(norm);
-      return;
-    }
-    setCustomColors((prev) => {
-      if (prev.some((x) => lc(x) === norm)) {
-        // bump to end so it's near the + button
-        const without = prev.filter((x) => lc(x) !== norm);
-        const next = [...without, norm].slice(-MAX_CUSTOM);
-        saveCustomColors(next);
-        return next;
-      }
-      const next = [...prev, norm].slice(-MAX_CUSTOM);
-      saveCustomColors(next);
-      return next;
-    });
     setColor(norm);
+    if (PALETTE.some((p) => lc(p) === norm)) return;
+    // De-dupe, then push to the end so it sits next to the + button.
+    const without = customColors.filter((x) => lc(x) !== norm);
+    onCustomColorsChange([...without, norm].slice(-MAX_CUSTOM));
   }
 
   function removeCustomColor(c: string) {
     const lc = c.toLowerCase();
-    setCustomColors((prev) => {
-      const next = prev.filter((x) => x.toLowerCase() !== lc);
-      saveCustomColors(next);
-      return next;
-    });
+    onCustomColorsChange(customColors.filter((x) => x.toLowerCase() !== lc));
     if (color.toLowerCase() === lc) {
       setColor(PALETTE[0]);
     }
+  }
+
+  /** Add a tag to the account library (skips presets and duplicates). */
+  function addCustomTag(raw: string) {
+    const n = normalizeTag(raw);
+    if (!n) return;
+    const lc = n.toLowerCase();
+    if (SUGGESTED_TAGS.some((p) => p.toLowerCase() === lc)) return;
+    if (customTags.some((x) => x.toLowerCase() === lc)) return;
+    onCustomTagsChange([...customTags, n].slice(-MAX_CUSTOM_TAGS));
+  }
+
+  /** Remove a tag from the account library (does not touch the routine's tags). */
+  function removeCustomTag(t: string) {
+    const lc = t.toLowerCase();
+    onCustomTagsChange(customTags.filter((x) => x.toLowerCase() !== lc));
   }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -238,8 +250,12 @@ export function TemplateDialog({ mode, onClose, onCreate, onUpdate, onDelete }: 
 
   function commitTagInput() {
     if (!tagInput.trim()) return;
-    // Allow comma-separated paste like "운동,건강,#오늘"
-    tagInput.split(/[,\s]+/).forEach((piece) => addTag(piece));
+    // Allow comma-separated paste like "운동,건강,#오늘". New tags are added to
+    // the routine AND saved to the shared library so they're reusable later.
+    tagInput.split(/[,\s]+/).forEach((piece) => {
+      addTag(piece);
+      addCustomTag(piece);
+    });
     setTagInput("");
   }
 
@@ -408,20 +424,48 @@ export function TemplateDialog({ mode, onClose, onCreate, onUpdate, onDelete }: 
               className="input-brut"
               maxLength={50}
             />
-            {SUGGESTED_TAGS.filter((s) => !tags.includes(s)).length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {SUGGESTED_TAGS.filter((s) => !tags.includes(s)).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => addTag(s)}
-                    className="text-xs font-bold rounded-full border-2 border-ink/30 px-2 py-0.5 hover:border-ink hover:bg-lime transition text-ink/60 hover:text-ink"
-                  >
-                    +#{s}
-                  </button>
-                ))}
-              </div>
-            )}
+            {(() => {
+              const lcs = (s: string) => s.toLowerCase();
+              const selected = new Set(tags.map(lcs));
+              const items = [
+                ...SUGGESTED_TAGS.map((t) => ({ tag: t, custom: false })),
+                ...customTags
+                  .filter((t) => !SUGGESTED_TAGS.some((p) => lcs(p) === lcs(t)))
+                  .map((t) => ({ tag: t, custom: true })),
+              ].filter(({ tag }) => !selected.has(lcs(tag)));
+              if (items.length === 0) return null;
+              const chipCls =
+                "text-xs font-bold rounded-full border-2 border-ink/30 px-2 py-0.5 hover:border-ink hover:bg-lime transition text-ink/60 hover:text-ink";
+              return (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {items.map(({ tag, custom }) =>
+                    custom ? (
+                      <span key={tag} className="relative group inline-flex">
+                        <button type="button" onClick={() => addTag(tag)} className={chipCls}>
+                          +#{tag}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeCustomTag(tag);
+                          }}
+                          aria-label={`Remove ${tag} from list`}
+                          title="Remove from list"
+                          className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full border-2 border-ink bg-white text-[10px] leading-none font-bold opacity-0 group-hover:opacity-100 focus:opacity-100 transition flex items-center justify-center"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ) : (
+                      <button key={tag} type="button" onClick={() => addTag(tag)} className={chipCls}>
+                        +#{tag}
+                      </button>
+                    ),
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Color */}

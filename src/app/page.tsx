@@ -14,21 +14,27 @@ export default async function HomePage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: templates }, { data: logs }, { data: doits }] = await Promise.all([
-    supabase
-      .from("activity_templates")
-      .select("*")
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("activity_logs")
-      .select("*")
-      .order("log_date", { ascending: true }),
-    supabase
-      .from("doits")
-      .select("*")
-      .order("doit_date", { ascending: true }),
-  ]);
+  const [{ data: templates }, { data: logs }, { data: doits }, { data: prefs }] =
+    await Promise.all([
+      supabase
+        .from("activity_templates")
+        .select("*")
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("activity_logs")
+        .select("*")
+        .order("log_date", { ascending: true }),
+      supabase
+        .from("doits")
+        .select("*")
+        .order("doit_date", { ascending: true }),
+      supabase
+        .from("user_preferences")
+        .select("custom_colors, custom_tags")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
 
   return (
     <main className="min-h-screen">
@@ -52,6 +58,8 @@ export default async function HomePage() {
         initialTemplates={(templates ?? []) as ActivityTemplate[]}
         initialLogs={(logs ?? []) as ActivityLog[]}
         initialDoits={(doits ?? []) as Doit[]}
+        initialCustomColors={prefs?.custom_colors ?? []}
+        initialCustomTags={prefs?.custom_tags ?? []}
       />
     </main>
   );

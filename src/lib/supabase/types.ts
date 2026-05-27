@@ -30,6 +30,13 @@ export type Doit = {
   updated_at: string;
 };
 
+export type UserPreferences = {
+  user_id: string;
+  custom_colors: string[];
+  custom_tags: string[];
+  updated_at: string;
+};
+
 export type Page = {
   template_id: string;
   log_date: string;

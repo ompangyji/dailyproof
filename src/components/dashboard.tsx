@@ -4,12 +4,13 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   createTemplate,
   deleteTemplate,
   updateTemplate,
 } from "@/app/actions/templates";
+import { updateCustomColors, updateCustomTags } from "@/app/actions/preferences";
 import { toggleLogToday } from "@/app/actions/logs";
 import { createDoit, deleteDoit, updateDoit } from "@/app/actions/doits";
 import { deleteImagesByUrl, diffRemoved, mediaSrc } from "@/lib/supabase/upload";
@@ -44,15 +45,62 @@ export function Dashboard({
   initialTemplates,
   initialLogs,
   initialDoits,
+  initialCustomColors,
+  initialCustomTags,
 }: {
   initialTemplates: ActivityTemplate[];
   initialLogs: ActivityLog[];
   initialDoits: Doit[];
+  initialCustomColors: string[];
+  initialCustomTags: string[];
 }) {
   const router = useRouter();
   const [templates, setTemplates] = useState<ActivityTemplate[]>(initialTemplates);
   const [logs, setLogs] = useState<ActivityLog[]>(initialLogs);
   const [doits, setDoits] = useState<Doit[]>(initialDoits);
+  // Custom color/tag library, synced to the account (DB) so it follows the
+  // user across devices instead of living in localStorage.
+  const [customColors, setCustomColors] = useState<string[]>(initialCustomColors);
+  const [customTags, setCustomTags] = useState<string[]>(initialCustomTags);
+
+  // One-time migration: if the account library is empty but this browser has a
+  // localStorage library from the old version, push it up to the account.
+  useEffect(() => {
+    try {
+      const readArr = (k: string): string[] => {
+        const raw = window.localStorage.getItem(k);
+        if (!raw) return [];
+        const a = JSON.parse(raw);
+        return Array.isArray(a) ? a.filter((x): x is string => typeof x === "string") : [];
+      };
+      if (initialCustomColors.length === 0) {
+        const ls = readArr("dailyproof:customColors");
+        if (ls.length) {
+          setCustomColors(ls);
+          void updateCustomColors(ls);
+        }
+      }
+      if (initialCustomTags.length === 0) {
+        const ls = readArr("dailyproof:customTags");
+        if (ls.length) {
+          setCustomTags(ls);
+          void updateCustomTags(ls);
+        }
+      }
+    } catch {
+      // ignore (privacy mode / malformed)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function persistCustomColors(next: string[]) {
+    setCustomColors(next);
+    void updateCustomColors(next);
+  }
+  function persistCustomTags(next: string[]) {
+    setCustomTags(next);
+    void updateCustomTags(next);
+  }
   const [tplDialog, setTplDialog] = useState<TemplateDialogState>({ kind: "closed" });
   const [doitDialog, setDoitDialog] = useState<DoitDialogState>({ kind: "closed" });
   const [busyToggle, setBusyToggle] = useState<string | null>(null);
@@ -371,6 +419,10 @@ export function Dashboard({
       {tplDialog.kind !== "closed" && (
         <TemplateDialog
           mode={tplDialog}
+          customColors={customColors}
+          customTags={customTags}
+          onCustomColorsChange={persistCustomColors}
+          onCustomTagsChange={persistCustomTags}
           onClose={() => setTplDialog({ kind: "closed" })}
           onCreate={async (input) => {
             const created = await createTemplate(input);

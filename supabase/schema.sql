@@ -182,3 +182,24 @@ create policy "media: delete own" on storage.objects
     bucket_id = 'media'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+-- =========================================================================
+-- 사용자별 라이브러리(커스텀 색상/태그). 계정 단위로 어디서나 동기화되도록
+-- localStorage 대신 DB에 보관. 사용자당 1행.
+-- =========================================================================
+create table if not exists public.user_preferences (
+  user_id       uuid primary key references auth.users(id) on delete cascade,
+  custom_colors text[] not null default '{}',
+  custom_tags   text[] not null default '{}',
+  updated_at    timestamptz not null default now()
+);
+
+drop trigger if exists user_preferences_touch on public.user_preferences;
+create trigger user_preferences_touch
+  before update on public.user_preferences
+  for each row execute function public.touch_updated_at();
+
+alter table public.user_preferences enable row level security;
+drop policy if exists "preferences owner-only" on public.user_preferences;
+create policy "preferences owner-only" on public.user_preferences
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
