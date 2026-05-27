@@ -32,6 +32,23 @@ type Props = {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+/**
+ * Allow only http(s) / mailto (and relative / anchor) links. Rejects
+ * dangerous schemes like `javascript:` or `data:` that could run script
+ * when the link is later clicked — an XSS vector via stored content.
+ */
+function safeLinkHref(raw: string): string | null {
+  const url = raw.trim();
+  if (!url) return null;
+  try {
+    const proto = new URL(url, "https://dummy.invalid").protocol.toLowerCase();
+    if (proto === "http:" || proto === "https:" || proto === "mailto:") return url;
+  } catch {
+    /* invalid URL */
+  }
+  return null;
+}
+
 export function PageEditor({
   templateId,
   logDate,
@@ -60,7 +77,12 @@ export function PageEditor({
       Placeholder.configure({
         placeholder: "What happened today? Write freely…",
       }),
-      LinkExt.configure({ openOnClick: false, autolink: true }),
+      LinkExt.configure({
+        openOnClick: false,
+        autolink: true,
+        protocols: ["http", "https", "mailto"],
+        validate: (href: string) => safeLinkHref(href) !== null,
+      }),
       TaskList,
       TaskItem.configure({ nested: true }),
       Image.configure({
@@ -368,11 +390,16 @@ function Toolbar({
           const prev = editor.getAttributes("link").href ?? "";
           const url = prompt("Link URL", prev);
           if (url === null) return;
-          if (url === "") {
+          if (url.trim() === "") {
             editor.chain().focus().unsetLink().run();
-          } else {
-            editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+            return;
           }
+          const safe = safeLinkHref(url);
+          if (!safe) {
+            alert("Only http(s) and mailto links are allowed.");
+            return;
+          }
+          editor.chain().focus().extendMarkRange("link").setLink({ href: safe }).run();
         }}
         className={`${btn} ${editor.isActive("link") ? active : ""}`}
       >

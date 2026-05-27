@@ -114,13 +114,31 @@ drop policy if exists "templates owner-only" on public.activity_templates;
 create policy "templates owner-only" on public.activity_templates
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- Logs/pages must belong to the user AND reference a template the user owns,
+-- so nobody can attach rows to someone else's template_id.
 drop policy if exists "logs owner-only" on public.activity_logs;
 create policy "logs owner-only" on public.activity_logs
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all
+  using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from public.activity_templates t
+      where t.id = template_id and t.user_id = auth.uid()
+    )
+  );
 
 drop policy if exists "pages owner-only" on public.pages;
 create policy "pages owner-only" on public.pages
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all
+  using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from public.activity_templates t
+      where t.id = template_id and t.user_id = auth.uid()
+    )
+  );
 
 -- =========================================================================
 -- Storage: 사용자 업로드 이미지를 담을 공개 버킷 + 자기 폴더만 쓰기 RLS.
