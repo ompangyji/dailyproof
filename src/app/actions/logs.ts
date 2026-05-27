@@ -11,18 +11,17 @@ async function requireUser() {
   return { supabase, user };
 }
 
-function todayISO() {
-  // Local date in YYYY-MM-DD. Matches what the calendar shows the user.
-  const d = new Date();
-  const tz = d.getTimezoneOffset();
-  const local = new Date(d.getTime() - tz * 60_000);
-  return local.toISOString().slice(0, 10);
-}
-
-/** Toggle a log for the given template on today's date. Returns { added: boolean }. */
-export async function toggleLogToday(template_id: string) {
+/**
+ * Toggle a log for the given template on `log_date`. The date is the user's
+ * LOCAL date computed in the browser and passed in — we must not derive it on
+ * the server, which runs in UTC and would be a day off near midnight.
+ * Returns { added: boolean }.
+ */
+export async function toggleLogToday(template_id: string, log_date: string) {
   const { supabase, user } = await requireUser();
-  const log_date = todayISO();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(log_date)) {
+    throw new Error("Invalid date.");
+  }
 
   const { data: existing } = await supabase
     .from("activity_logs")

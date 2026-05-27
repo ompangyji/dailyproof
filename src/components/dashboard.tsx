@@ -151,7 +151,7 @@ export function Dashboard({
     }
     startTransition(async () => {
       try {
-        await toggleLogToday(template_id);
+        await toggleLogToday(template_id, today);
         // No router.refresh() here: the optimistic state above already reflects
         // the change, and toggleLogToday's revalidatePath keeps the cache fresh.
         // Refreshing would re-fetch the whole page (getUser + 3 queries) for
