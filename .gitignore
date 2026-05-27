@@ -30,6 +30,10 @@ yarn-error.log*
 supabase/프로젝트 비밀번호.txt
 *.secret.txt
 
+# favicon source artifacts (generated icons live in src/app/)
+/favicon.png
+/favicon.zip
+
 # vercel
 .vercel
 
