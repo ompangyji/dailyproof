@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { uploadImage, type UploadKind } from "@/lib/supabase/upload";
+import { Lightbox } from "./lightbox";
 
 type Props = {
   kind: UploadKind;
@@ -14,6 +15,7 @@ export function ImageUploader({ kind, urls, onChange, max = 12 }: Props) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<string | null>(null);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -61,7 +63,9 @@ export function ImageUploader({ kind, urls, onChange, max = 12 }: Props) {
             <img
               src={u}
               alt=""
-              className="h-20 w-20 object-cover rounded-lg border-2 border-ink"
+              onClick={() => setViewer(u)}
+              className="h-20 w-20 object-cover rounded-lg border-2 border-ink cursor-zoom-in"
+              title="Click to view"
             />
             <button
               type="button"
@@ -99,6 +103,7 @@ export function ImageUploader({ kind, urls, onChange, max = 12 }: Props) {
           {error}
         </p>
       )}
+      {viewer && <Lightbox src={viewer} onClose={() => setViewer(null)} />}
     </div>
   );
 }

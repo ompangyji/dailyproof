@@ -35,6 +35,11 @@ const SUGGESTED_EMOJI = [
   "🛍️", "🚗", "✈️", "🏥", "👥", "🎂", "🌧️", "❤️",
 ];
 
+function sameUrls(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((v, i) => v === b[i]);
+}
+
 export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Props) {
   const initialTitle = mode.kind === "edit" ? mode.doit.title : "";
   const initialDate = mode.kind === "edit" ? mode.doit.doit_date : mode.date;
@@ -55,6 +60,25 @@ export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Prop
 
   const emojiPopRef = useRef<HTMLDivElement | null>(null);
 
+  const dirty =
+    title !== initialTitle ||
+    date !== initialDate ||
+    emoji !== initialEmoji ||
+    memo !== initialMemo ||
+    !sameUrls(images, initialImages);
+
+  const canSave = !busy && title.trim().length > 0 && (mode.kind === "create" || dirty);
+
+  function requestClose() {
+    if (
+      dirty &&
+      !confirm("You have unsaved changes. They won't be saved if you close. Close anyway?")
+    ) {
+      return;
+    }
+    onClose();
+  }
+
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
@@ -69,7 +93,7 @@ export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Prop
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         if (showEmojiPicker) setShowEmojiPicker(false);
-        else onClose();
+        else requestClose();
       }
     }
     function onClick(e: MouseEvent) {
@@ -84,7 +108,8 @@ export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Prop
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("mousedown", onClick);
     };
-  }, [onClose, showEmojiPicker]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showEmojiPicker, dirty]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -119,14 +144,14 @@ export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Prop
   const modal = (
     <div
       className="fixed inset-0 z-[1000] bg-ink/40 flex items-start sm:items-center justify-center p-4 overflow-y-auto"
-      onClick={onClose}
+      onClick={requestClose}
     >
       <div
         className="w-full max-w-md card-brut p-6 my-8"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-display text-2xl mb-5">
-          {mode.kind === "create" ? "New doit" : "Edit doit"}
+          {mode.kind === "create" ? "New doit" : "Doit"}
         </h2>
         <form onSubmit={submit} className="space-y-4">
           {/* Emoji + title */}
@@ -238,6 +263,11 @@ export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Prop
               {error}
             </p>
           )}
+          {mode.kind === "edit" && dirty && (
+            <p className="text-xs font-bold text-ink/60">
+              Unsaved changes — they won&apos;t be saved if you close.
+            </p>
+          )}
           <div className="flex items-center justify-between gap-2 pt-2 flex-wrap">
             <div>
               {mode.kind === "edit" && (
@@ -251,10 +281,10 @@ export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Prop
               )}
             </div>
             <div className="flex gap-2 ml-auto">
-              <button type="button" onClick={onClose} className="btn-brut btn-ghost">
+              <button type="button" onClick={requestClose} className="btn-brut btn-ghost">
                 Cancel
               </button>
-              <button type="submit" disabled={busy} className="btn-brut btn-primary">
+              <button type="submit" disabled={!canSave} className="btn-brut btn-primary">
                 {busy ? "Saving…" : "Save"}
               </button>
             </div>

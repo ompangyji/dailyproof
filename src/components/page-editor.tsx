@@ -17,6 +17,7 @@ import {
   extractImageUrls,
   uploadImage,
 } from "@/lib/supabase/upload";
+import { Lightbox } from "./lightbox";
 
 type Props = {
   templateId: string;
@@ -44,6 +45,7 @@ export function PageEditor({
   const router = useRouter();
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [uploading, setUploading] = useState(false);
+  const [viewer, setViewer] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Snapshot of image URLs as of the most recent successful save. Used to
@@ -61,7 +63,11 @@ export function PageEditor({
       LinkExt.configure({ openOnClick: false, autolink: true }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      Image.configure({ inline: false, allowBase64: false }),
+      Image.configure({
+        inline: false,
+        allowBase64: false,
+        HTMLAttributes: { class: "cursor-zoom-in", title: "Click to view" },
+      }),
     ],
     content: initialContent ?? "",
     editorProps: {
@@ -93,6 +99,14 @@ export function PageEditor({
         event.preventDefault();
         void insertFiles(imageFiles);
         return true;
+      },
+      // Click an image to view it full-size. We don't preventDefault, so the
+      // node still gets selected underneath and can be deleted after closing.
+      handleClickOn(_view, _pos, node) {
+        if (node.type.name === "image" && typeof node.attrs.src === "string") {
+          setViewer(node.attrs.src);
+        }
+        return false;
       },
     },
   });
@@ -220,6 +234,7 @@ export function PageEditor({
         <Toolbar editor={editor} onUploadClick={() => fileInputRef.current?.click()} />
         <EditorContent editor={editor} />
       </div>
+      {viewer && <Lightbox src={viewer} onClose={() => setViewer(null)} />}
     </article>
   );
 }
