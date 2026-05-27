@@ -5,10 +5,22 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+/**
+ * Only allow same-origin internal paths as the post-login destination.
+ * Rejects absolute URLs ("https://evil.com"), protocol-relative ("//evil.com"),
+ * and backslash tricks ("/\\evil.com") to prevent open-redirect phishing.
+ */
+function safeNext(raw: string | null): string {
+  if (!raw) return "/";
+  if (!raw.startsWith("/")) return "/";
+  if (raw.startsWith("//") || raw.startsWith("/\\")) return "/";
+  return raw;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const search = useSearchParams();
-  const next = search.get("next") ?? "/";
+  const next = safeNext(search.get("next"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
