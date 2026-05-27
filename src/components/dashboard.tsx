@@ -697,6 +697,26 @@ function GraphCard({
               </code>
             </div>
           ))}
+
+          <details className="text-xs text-ink/60">
+            <summary className="cursor-pointer font-bold">Customize</summary>
+            <div className="mt-1.5 space-y-1.5">
+              <p>Append query params to the URL:</p>
+              <code className="block text-[11px] text-ink/70 bg-paper border-2 border-ink/15 rounded-md px-2 py-1.5 break-all">
+                ?theme=dark&amp;color=ddfc69&amp;bg=0d1117&amp;radius=3&amp;hideLegend=1
+              </code>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li><b>theme</b>: light | dark</li>
+                <li><b>color</b>: hex without # (grass color)</li>
+                <li><b>bg</b>: hex background</li>
+                <li><b>radius</b>: 0–6 (cell roundness)</li>
+                <li><b>hideTitle</b> / <b>hideLegend</b>: 1 to hide</li>
+              </ul>
+              <p>
+                Raw data for custom rendering: add <b>?format=json</b>
+              </p>
+            </div>
+          </details>
         </div>
       </div>
     </li>
