@@ -4,6 +4,7 @@ import type {
   ActivityLog,
   ActivityTemplate,
   Doit,
+  Tracker,
 } from "@/lib/supabase/types";
 import { Dashboard } from "@/components/dashboard";
 
@@ -14,27 +15,37 @@ export default async function HomePage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: templates }, { data: logs }, { data: doits }, { data: prefs }] =
-    await Promise.all([
-      supabase
-        .from("activity_templates")
-        .select("*")
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("activity_logs")
-        .select("*")
-        .order("log_date", { ascending: true }),
-      supabase
-        .from("doits")
-        .select("*")
-        .order("doit_date", { ascending: true }),
-      supabase
-        .from("user_preferences")
-        .select("custom_colors, custom_tags")
-        .eq("user_id", user.id)
-        .maybeSingle(),
-    ]);
+  const [
+    { data: templates },
+    { data: logs },
+    { data: doits },
+    { data: prefs },
+    { data: trackers },
+  ] = await Promise.all([
+    supabase
+      .from("activity_templates")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("activity_logs")
+      .select("*")
+      .order("log_date", { ascending: true }),
+    supabase
+      .from("doits")
+      .select("*")
+      .order("doit_date", { ascending: true }),
+    supabase
+      .from("user_preferences")
+      .select("custom_colors, custom_tags")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("trackers")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+  ]);
 
   return (
     <main className="min-h-screen">
@@ -60,6 +71,7 @@ export default async function HomePage() {
         initialDoits={(doits ?? []) as Doit[]}
         initialCustomColors={prefs?.custom_colors ?? []}
         initialCustomTags={prefs?.custom_tags ?? []}
+        initialTrackers={(trackers ?? []) as Tracker[]}
       />
     </main>
   );

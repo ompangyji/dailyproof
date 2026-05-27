@@ -203,3 +203,104 @@ alter table public.user_preferences enable row level security;
 drop policy if exists "preferences owner-only" on public.user_preferences;
 create policy "preferences owner-only" on public.user_preferences
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- =========================================================================
+-- Trackers: 외부 임베드용 "잔디" 정의. 유형마다 태그 필터 + doit 포함 여부 +
+-- 추측 불가능한 공개 토큰. 토큰으로만 외부에서 집계를 조회할 수 있다.
+-- =========================================================================
+create table if not exists public.trackers (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references auth.users(id) on delete cascade,
+  name          text not null check (char_length(name) between 1 and 100),
+  tags          text[] not null default '{}',
+  include_doits boolean not null default false,
+  token         text not null unique default encode(gen_random_bytes(12), 'hex'),
+  enabled       boolean not null default true,
+  sort_order    int not null default 0,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create index if not exists trackers_user_idx
+  on public.trackers (user_id, sort_order, created_at);
+
+drop trigger if exists trackers_touch on public.trackers;
+create trigger trackers_touch
+  before update on public.trackers
+  for each row execute function public.touch_updated_at();
+
+alter table public.trackers enable row level security;
+-- Owner-only for management. Public read happens ONLY through get_grass() below,
+-- so anon can never list trackers or read tokens.
+drop policy if exists "trackers owner-only" on public.trackers;
+create policy "trackers owner-only" on public.trackers
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Public aggregate for the embed endpoint. SECURITY DEFINER so it can read the
+-- owner's logs/doits past RLS, but it ONLY ever returns per-day counts for the
+-- matching token — no raw rows leak. Last 12 months.
+create or replace function public.get_grass(p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v public.trackers;
+  v_start date := (current_date - interval '364 days')::date;
+  v_result jsonb;
+begin
+  select * into v from public.trackers where token = p_token and enabled = true;
+  if not found then
+    return null;
+  end if;
+
+  with days as (
+    select gs::date as d
+    from generate_series(v_start, current_date, interval '1 day') gs
+  ),
+  routine_counts as (
+    select l.log_date as d, count(*)::int as c
+    from public.activity_logs l
+    where l.user_id = v.user_id
+      and l.log_date >= v_start
+      and (
+        cardinality(v.tags) = 0
+        or exists (
+          select 1 from public.activity_templates t
+          where t.id = l.template_id and t.tags && v.tags
+        )
+      )
+    group by l.log_date
+  ),
+  doit_counts as (
+    select dt.doit_date as d, count(*)::int as c
+    from public.doits dt
+    where v.include_doits
+      and dt.user_id = v.user_id
+      and dt.doit_date >= v_start
+    group by dt.doit_date
+  ),
+  merged as (
+    select days.d,
+      coalesce((select c from routine_counts r where r.d = days.d), 0)
+      + coalesce((select c from doit_counts dc where dc.d = days.d), 0) as c
+    from days
+  )
+  select jsonb_build_object(
+    'name', v.name,
+    'days', coalesce(
+      jsonb_agg(
+        jsonb_build_object('d', to_char(merged.d, 'YYYY-MM-DD'), 'c', merged.c)
+        order by merged.d
+      ),
+      '[]'::jsonb
+    )
+  ) into v_result
+  from merged;
+
+  return v_result;
+end;
+$$;
+
+grant execute on function public.get_grass(text) to anon, authenticated;

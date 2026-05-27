@@ -13,14 +13,17 @@ import {
 import { updateCustomColors, updateCustomTags } from "@/app/actions/preferences";
 import { toggleLogToday } from "@/app/actions/logs";
 import { createDoit, deleteDoit, updateDoit } from "@/app/actions/doits";
+import { createTracker, deleteTracker, updateTracker } from "@/app/actions/trackers";
 import { deleteImagesByUrl, diffRemoved, mediaSrc } from "@/lib/supabase/upload";
 import type {
   ActivityLog,
   ActivityTemplate,
   Doit,
+  Tracker,
 } from "@/lib/supabase/types";
 import { TemplateDialog } from "./template-dialog";
 import { DoitDialog } from "./doit-dialog";
+import { TrackerDialog } from "./tracker-dialog";
 
 const DEFAULT_COLOR = "#ddfc69";
 
@@ -41,18 +44,25 @@ type DoitDialogState =
   | { kind: "create"; date: string }
   | { kind: "edit"; doit: Doit };
 
+type TrackerDialogState =
+  | { kind: "closed" }
+  | { kind: "create" }
+  | { kind: "edit"; tracker: Tracker };
+
 export function Dashboard({
   initialTemplates,
   initialLogs,
   initialDoits,
   initialCustomColors,
   initialCustomTags,
+  initialTrackers,
 }: {
   initialTemplates: ActivityTemplate[];
   initialLogs: ActivityLog[];
   initialDoits: Doit[];
   initialCustomColors: string[];
   initialCustomTags: string[];
+  initialTrackers: Tracker[];
 }) {
   const router = useRouter();
   const [templates, setTemplates] = useState<ActivityTemplate[]>(initialTemplates);
@@ -62,6 +72,7 @@ export function Dashboard({
   // user across devices instead of living in localStorage.
   const [customColors, setCustomColors] = useState<string[]>(initialCustomColors);
   const [customTags, setCustomTags] = useState<string[]>(initialCustomTags);
+  const [trackers, setTrackers] = useState<Tracker[]>(initialTrackers);
 
   // One-time migration: if the account library is empty but this browser has a
   // localStorage library from the old version, push it up to the account.
@@ -103,6 +114,7 @@ export function Dashboard({
   }
   const [tplDialog, setTplDialog] = useState<TemplateDialogState>({ kind: "closed" });
   const [doitDialog, setDoitDialog] = useState<DoitDialogState>({ kind: "closed" });
+  const [trackerDialog, setTrackerDialog] = useState<TrackerDialogState>({ kind: "closed" });
   const [busyToggle, setBusyToggle] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -122,6 +134,23 @@ export function Dashboard({
     () => doits.filter((d) => d.doit_date === today),
     [doits, today],
   );
+
+  // Tags offered when configuring a shareable graph: the account library plus
+  // any tags already used by routines.
+  const availableTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of customTags) {
+      const v = t.trim();
+      if (v) set.add(v);
+    }
+    for (const tpl of templates) {
+      for (const tag of tpl.tags ?? []) {
+        const v = tag.trim();
+        if (v) set.add(v);
+      }
+    }
+    return Array.from(set);
+  }, [customTags, templates]);
 
   const events = useMemo(() => {
     const routineEvents = logs
@@ -416,6 +445,49 @@ export function Dashboard({
         )}
       </div>
 
+      {/* Shareable graphs — embeddable "grass" for other sites */}
+      <div className="card-brut p-5 sm:p-6">
+        <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+          <div>
+            <h2 className="font-display text-2xl sm:text-3xl">Shareable graphs</h2>
+            <p className="text-sm text-ink/60 mt-1">
+              Embed your activity grass anywhere via an image link
+            </p>
+          </div>
+          <button
+            onClick={() => setTrackerDialog({ kind: "create" })}
+            className="btn-brut btn-primary"
+          >
+            <span className="text-lg leading-none">＋</span> New graph
+          </button>
+        </div>
+
+        {trackers.length === 0 ? (
+          <div className="rounded-chunk border-2 border-dashed border-ink/40 py-10 text-center">
+            <p className="font-display text-xl mb-1">No graphs yet</p>
+            <p className="text-sm text-ink/60">
+              Click &quot;+ New graph&quot; to create an embeddable activity graph
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-4">
+            {trackers.map((t) => (
+              <GraphCard
+                key={t.id}
+                tracker={t}
+                onEdit={() => setTrackerDialog({ kind: "edit", tracker: t })}
+                onToggleEnabled={async () => {
+                  const updated = await updateTracker({ id: t.id, enabled: !t.enabled });
+                  setTrackers((prev) =>
+                    prev.map((x) => (x.id === t.id ? (updated as Tracker) : x)),
+                  );
+                }}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+
       {tplDialog.kind !== "closed" && (
         <TemplateDialog
           mode={tplDialog}
@@ -482,6 +554,101 @@ export function Dashboard({
           }}
         />
       )}
+
+      {trackerDialog.kind !== "closed" && (
+        <TrackerDialog
+          mode={trackerDialog}
+          availableTags={availableTags}
+          onClose={() => setTrackerDialog({ kind: "closed" })}
+          onCreate={async (input) => {
+            const created = await createTracker(input);
+            setTrackers((prev) => [...prev, created as Tracker]);
+            setTrackerDialog({ kind: "closed" });
+          }}
+          onUpdate={async (input) => {
+            const updated = await updateTracker(input);
+            setTrackers((prev) =>
+              prev.map((t) => (t.id === input.id ? (updated as Tracker) : t)),
+            );
+            setTrackerDialog({ kind: "closed" });
+          }}
+          onDelete={async (id) => {
+            if (!confirm("Delete this graph? The embed link will stop working.")) return;
+            await deleteTracker(id);
+            setTrackers((prev) => prev.filter((t) => t.id !== id));
+            setTrackerDialog({ kind: "closed" });
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+function GraphCard({
+  tracker,
+  onEdit,
+  onToggleEnabled,
+}: {
+  tracker: Tracker;
+  onEdit: () => void;
+  onToggleEnabled: () => void;
+}) {
+  const [origin, setOrigin] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
+  useEffect(() => setOrigin(window.location.origin), []);
+
+  const url = `${origin}/api/grass/${tracker.token}`;
+  const markdown = `![${tracker.name}](${url})`;
+
+  async function copy(text: string, which: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {
+      // clipboard unavailable — ignore
+    }
+  }
+
+  return (
+    <li className="rounded-chunk border-2 border-ink bg-white overflow-hidden shadow-brut">
+      <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b-2 border-ink bg-paper flex-wrap">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-bold truncate">{tracker.name}</span>
+          {!tracker.enabled && (
+            <span className="text-[11px] font-bold rounded-full border-2 border-ink bg-white px-2 py-0.5">
+              Disabled
+            </span>
+          )}
+        </div>
+        <div className="flex gap-2 items-center">
+          <button onClick={onToggleEnabled} className="btn-brut btn-ghost text-xs">
+            {tracker.enabled ? "Disable" : "Enable"}
+          </button>
+          <button onClick={onEdit} className="btn-brut btn-ghost text-xs">
+            Edit
+          </button>
+        </div>
+      </div>
+      <div className="p-4 space-y-3">
+        {tracker.enabled ? (
+          <div className="overflow-x-auto">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/grass/${tracker.token}`} alt={`${tracker.name} graph`} className="max-w-none" />
+          </div>
+        ) : (
+          <p className="text-sm text-ink/50">Enable to preview and share.</p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => copy(url, "url")} className="btn-brut text-xs">
+            {copied === "url" ? "Copied!" : "Copy URL"}
+          </button>
+          <button type="button" onClick={() => copy(markdown, "md")} className="btn-brut text-xs">
+            {copied === "md" ? "Copied!" : "Copy Markdown"}
+          </button>
+        </div>
+        <code className="block text-[11px] text-ink/60 break-all">{url}</code>
+      </div>
+    </li>
   );
 }

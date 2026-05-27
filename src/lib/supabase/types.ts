@@ -37,6 +37,19 @@ export type UserPreferences = {
   updated_at: string;
 };
 
+export type Tracker = {
+  id: string;
+  user_id: string;
+  name: string;
+  tags: string[];
+  include_doits: boolean;
+  token: string;
+  enabled: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Page = {
   template_id: string;
   log_date: string;
