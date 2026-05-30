@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { mediaSrc, uploadImage, type UploadKind } from "@/lib/supabase/upload";
 import { Lightbox } from "./lightbox";
+import { MediaImage } from "./media-image";
 
 type Props = {
   kind: UploadKind;
@@ -58,14 +59,12 @@ export function ImageUploader({ kind, urls, onChange, max = 12 }: Props) {
       />
       <div className="flex gap-2 flex-wrap">
         {urls.map((u, i) => (
-          // eslint-disable-next-line @next/next/no-img-element
           <span key={`${u}-${i}`} className="relative inline-block group">
-            <img
-              src={mediaSrc(u)}
-              alt=""
+            <MediaImage
+              src={u}
               onClick={() => setViewer(mediaSrc(u))}
-              className="h-20 w-20 object-cover rounded-lg border-2 border-ink cursor-zoom-in"
               title="Click to view"
+              className="h-20 w-20 rounded-lg border-2 border-ink cursor-zoom-in"
             />
             <button
               type="button"

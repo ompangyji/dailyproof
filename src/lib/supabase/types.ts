@@ -25,6 +25,7 @@ export type Doit = {
   emoji: string | null;
   memo: string | null;
   image_urls: string[];
+  tags: string[];
   doit_date: string; // YYYY-MM-DD
   created_at: string;
   updated_at: string;

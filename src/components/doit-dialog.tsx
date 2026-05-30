@@ -4,6 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Doit } from "@/lib/supabase/types";
 import { ImageUploader } from "./image-uploader";
+import {
+  normalizeTag,
+  SUGGESTED_TAGS,
+  TagsField,
+  type TagsFieldHandle,
+} from "./tags-field";
 
 type Mode =
   | { kind: "create"; date: string }
@@ -11,6 +17,9 @@ type Mode =
 
 type Props = {
   mode: Mode;
+  /** Account-synced reusable tag library (DB). */
+  customTags: string[];
+  onCustomTagsChange: (next: string[]) => void;
   onClose: () => void;
   onCreate: (input: {
     title: string;
@@ -18,6 +27,7 @@ type Props = {
     emoji: string | null;
     memo: string | null;
     image_urls: string[];
+    tags: string[];
   }) => Promise<void>;
   onUpdate: (input: {
     id: string;
@@ -26,6 +36,7 @@ type Props = {
     emoji: string | null;
     memo: string | null;
     image_urls: string[];
+    tags: string[];
   }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 };
@@ -35,24 +46,35 @@ const SUGGESTED_EMOJI = [
   "🛍️", "🚗", "✈️", "🏥", "👥", "🎂", "🌧️", "❤️",
 ];
 
-function sameUrls(a: string[], b: string[]): boolean {
+function sameStringList(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((v, i) => v === b[i]);
 }
 
-export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Props) {
+export function DoitDialog({
+  mode,
+  customTags,
+  onCustomTagsChange,
+  onClose,
+  onCreate,
+  onUpdate,
+  onDelete,
+}: Props) {
   const initialTitle = mode.kind === "edit" ? mode.doit.title : "";
   const initialDate = mode.kind === "edit" ? mode.doit.doit_date : mode.date;
   const initialEmoji = mode.kind === "edit" ? (mode.doit.emoji ?? "") : "";
   const initialMemo = mode.kind === "edit" ? (mode.doit.memo ?? "") : "";
   const initialImages =
     mode.kind === "edit" ? (mode.doit.image_urls ?? []) : [];
+  const initialTags = mode.kind === "edit" ? (mode.doit.tags ?? []) : [];
 
   const [title, setTitle] = useState(initialTitle);
   const [date, setDate] = useState(initialDate);
   const [emoji, setEmoji] = useState(initialEmoji);
   const [memo, setMemo] = useState(initialMemo);
   const [images, setImages] = useState<string[]>(initialImages);
+  const [tags, setTags] = useState<string[]>(initialTags);
+  const tagsRef = useRef<TagsFieldHandle>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,12 +82,34 @@ export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Prop
 
   const emojiPopRef = useRef<HTMLDivElement | null>(null);
 
+  // When editing an existing doit, fold any of its tags that aren't already in
+  // the suggested/custom library back in so they appear as reusable chips.
+  useEffect(() => {
+    if (mode.kind !== "edit") return;
+    const lc = (s: string) => s.toLowerCase();
+    const presetTagSet = new Set(SUGGESTED_TAGS.map(lc));
+    const known = new Set(customTags.map(lc));
+    const missing: string[] = [];
+    for (const t of mode.doit.tags ?? []) {
+      const n = normalizeTag(t);
+      if (n && !presetTagSet.has(lc(n)) && !known.has(lc(n))) {
+        known.add(lc(n));
+        missing.push(n);
+      }
+    }
+    if (missing.length) {
+      onCustomTagsChange([...customTags, ...missing].slice(-40));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const dirty =
     title !== initialTitle ||
     date !== initialDate ||
     emoji !== initialEmoji ||
     memo !== initialMemo ||
-    !sameUrls(images, initialImages);
+    !sameStringList(images, initialImages) ||
+    !sameStringList(tags, initialTags);
 
   const canSave = !busy && title.trim().length > 0 && (mode.kind === "create" || dirty);
 
@@ -117,6 +161,7 @@ export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Prop
       setError("Title is required.");
       return;
     }
+    const finalTags = tagsRef.current?.flush() ?? tags;
     setBusy(true);
     setError(null);
     try {
@@ -126,6 +171,7 @@ export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Prop
         emoji: emoji.trim() || null,
         memo: memo.trim() || null,
         image_urls: images,
+        tags: finalTags,
       };
       if (mode.kind === "create") {
         await onCreate(payload);
@@ -242,6 +288,20 @@ export function DoitDialog({ mode, onClose, onCreate, onUpdate, onDelete }: Prop
               rows={2}
               maxLength={500}
               className="input-brut resize-none"
+            />
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="block text-sm font-bold mb-1.5">
+              Tags <span className="font-normal text-ink/50">(optional)</span>
+            </label>
+            <TagsField
+              ref={tagsRef}
+              tags={tags}
+              onTagsChange={setTags}
+              customTags={customTags}
+              onCustomTagsChange={onCustomTagsChange}
             />
           </div>
 

@@ -33,11 +33,14 @@ export function LoginForm() {
     setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       setError(error.message);
       return;
     }
+    // Keep `loading` on through the navigation so the button stays "Signing in…"
+    // until the destination's loading.tsx takes over — otherwise there's a
+    // visible flash where the page looks idle while it's actually still working.
     router.replace(next);
     router.refresh();
   }

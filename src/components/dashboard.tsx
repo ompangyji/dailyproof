@@ -14,7 +14,8 @@ import { updateCustomColors, updateCustomTags } from "@/app/actions/preferences"
 import { toggleLogToday } from "@/app/actions/logs";
 import { createDoit, deleteDoit, updateDoit } from "@/app/actions/doits";
 import { createTracker, deleteTracker, updateTracker } from "@/app/actions/trackers";
-import { deleteImagesByUrl, diffRemoved, mediaSrc } from "@/lib/supabase/upload";
+import { deleteImagesByUrl, diffRemoved } from "@/lib/supabase/upload";
+import { MediaImage } from "./media-image";
 import type {
   ActivityLog,
   ActivityTemplate,
@@ -136,7 +137,7 @@ export function Dashboard({
   );
 
   // Tags offered when configuring a shareable graph: the account library plus
-  // any tags already used by routines.
+  // any tags already used by routines or doits.
   const availableTags = useMemo(() => {
     const set = new Set<string>();
     for (const t of customTags) {
@@ -149,8 +150,14 @@ export function Dashboard({
         if (v) set.add(v);
       }
     }
+    for (const d of doits) {
+      for (const tag of d.tags ?? []) {
+        const v = tag.trim();
+        if (v) set.add(v);
+      }
+    }
     return Array.from(set);
-  }, [customTags, templates]);
+  }, [customTags, templates, doits]);
 
   const events = useMemo(() => {
     const routineEvents = logs
@@ -417,18 +424,28 @@ export function Dashboard({
                     )}
                     <span className="font-bold truncate">{d.title}</span>
                   </div>
+                  {(d.tags?.length ?? 0) > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {(d.tags ?? []).map((tag) => (
+                        <span
+                          key={tag}
+                          className="text-[11px] font-bold rounded-full border border-ink/40 px-1.5 py-0.5 bg-white/60"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {d.memo && (
                     <p className="text-xs text-ink/60 line-clamp-2">{d.memo}</p>
                   )}
                   {(d.image_urls?.length ?? 0) > 0 && (
                     <div className="flex gap-1.5 overflow-x-auto">
                       {d.image_urls.slice(0, 4).map((u, i) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <MediaImage
                           key={`${u}-${i}`}
-                          src={mediaSrc(u)}
-                          alt=""
-                          className="h-14 w-14 object-cover rounded-md border-2 border-ink shrink-0"
+                          src={u}
+                          className="h-14 w-14 rounded-md border-2 border-ink shrink-0"
                         />
                       ))}
                       {d.image_urls.length > 4 && (
@@ -523,6 +540,8 @@ export function Dashboard({
       {doitDialog.kind !== "closed" && (
         <DoitDialog
           mode={doitDialog}
+          customTags={customTags}
+          onCustomTagsChange={persistCustomTags}
           onClose={() => setDoitDialog({ kind: "closed" })}
           onCreate={async (input) => {
             const created = await createDoit(input);
@@ -591,11 +610,22 @@ function GraphCard({
 }: {
   tracker: Tracker;
   onEdit: () => void;
-  onToggleEnabled: () => void;
+  onToggleEnabled: () => Promise<void>;
 }) {
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
+  const [toggling, setToggling] = useState(false);
   useEffect(() => setOrigin(window.location.origin), []);
+
+  async function handleToggle() {
+    if (toggling) return;
+    setToggling(true);
+    try {
+      await onToggleEnabled();
+    } finally {
+      setToggling(false);
+    }
+  }
 
   const url = `${origin}/api/grass/${tracker.token}`;
   const snippets = [
@@ -626,8 +656,25 @@ function GraphCard({
           )}
         </div>
         <div className="flex gap-2 items-center">
-          <button onClick={onToggleEnabled} className="btn-brut btn-ghost text-xs">
-            {tracker.enabled ? "Disable" : "Enable"}
+          <button
+            onClick={handleToggle}
+            disabled={toggling}
+            className="btn-brut btn-ghost text-xs"
+          >
+            {toggling ? (
+              <>
+                <span
+                  className="brut-spinner"
+                  style={{ width: "0.85rem", height: "0.85rem", borderWidth: "2px" }}
+                  aria-hidden
+                />
+                Saving…
+              </>
+            ) : tracker.enabled ? (
+              "Disable"
+            ) : (
+              "Enable"
+            )}
           </button>
           <button onClick={onEdit} className="btn-brut btn-ghost text-xs">
             Edit

@@ -44,7 +44,7 @@ create index if not exists activity_logs_user_date_idx
   on public.activity_logs (user_id, log_date desc);
 
 -- 그 날만 한 일을 가볍게 기록하는 일회성 항목 (doit).
--- 루틴과 달리 재사용되지 않고, 제목 + 이모지 + 메모 + 이미지 갤러리.
+-- 루틴과 달리 재사용되지 않고, 제목 + 이모지 + 메모 + 이미지 갤러리 + 태그.
 create table if not exists public.doits (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
@@ -52,17 +52,23 @@ create table if not exists public.doits (
   emoji       text,
   memo        text,
   image_urls  text[] not null default '{}',
+  tags        text[] not null default '{}',         -- # 없이 저장
   doit_date   date not null,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
 
--- 기존 v3 → v4 마이그레이션
+-- 기존 v3 → v4 / v5 마이그레이션
 alter table public.doits
-  add column if not exists image_urls text[] not null default '{}';
+  add column if not exists image_urls text[] not null default '{}',
+  add column if not exists tags       text[] not null default '{}';
 
 create index if not exists doits_user_date_idx
   on public.doits (user_id, doit_date desc);
+
+-- 태그 배열 검색용 GIN 인덱스 (트래커 태그 필터에서 사용)
+create index if not exists doits_tags_idx
+  on public.doits using gin (tags);
 
 drop trigger if exists doits_touch on public.doits;
 create trigger doits_touch
@@ -279,6 +285,10 @@ begin
     where v.include_doits
       and dt.user_id = v.user_id
       and dt.doit_date >= v_start
+      and (
+        cardinality(v.tags) = 0
+        or dt.tags && v.tags
+      )
     group by dt.doit_date
   ),
   merged as (

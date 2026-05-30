@@ -28,12 +28,29 @@ function normalizeUrls(raw: string[] | undefined): string[] {
     .slice(0, 30);
 }
 
+/** Strip "#" and whitespace, dedupe case-insensitively, cap to 20. */
+function normalizeTags(raw: string[] | undefined): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of raw) {
+    const cleaned = r.trim().replace(/^#+/, "").replace(/\s+/g, "");
+    if (!cleaned) continue;
+    const lc = cleaned.toLowerCase();
+    if (seen.has(lc)) continue;
+    seen.add(lc);
+    out.push(cleaned);
+  }
+  return out.slice(0, 20);
+}
+
 export async function createDoit(input: {
   title: string;
   doit_date: string;
   emoji?: string | null;
   memo?: string | null;
   image_urls?: string[];
+  tags?: string[];
 }) {
   const { supabase, user } = await requireUser();
   const { data, error } = await supabase
@@ -45,6 +62,7 @@ export async function createDoit(input: {
       emoji: normalizeEmoji(input.emoji),
       memo: input.memo?.trim() || null,
       image_urls: normalizeUrls(input.image_urls),
+      tags: normalizeTags(input.tags),
     })
     .select("*")
     .single();
@@ -60,6 +78,7 @@ export async function updateDoit(input: {
   emoji?: string | null;
   memo?: string | null;
   image_urls?: string[];
+  tags?: string[];
 }) {
   const { supabase } = await requireUser();
   const patch: Record<string, unknown> = {};
@@ -69,6 +88,7 @@ export async function updateDoit(input: {
   if (input.memo !== undefined) patch.memo = input.memo?.trim() || null;
   if (input.image_urls !== undefined)
     patch.image_urls = normalizeUrls(input.image_urls);
+  if (input.tags !== undefined) patch.tags = normalizeTags(input.tags);
   const { data, error } = await supabase
     .from("doits")
     .update(patch)

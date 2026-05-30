@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ActivityTemplate } from "@/lib/supabase/types";
+import {
+  normalizeTag,
+  SUGGESTED_TAGS,
+  TagsField,
+  type TagsFieldHandle,
+} from "./tags-field";
 
 type Mode =
   | { kind: "create" }
@@ -65,25 +71,15 @@ function normalizeHex(input: string): string | null {
   return (v.startsWith("#") ? v : `#${v}`).toLowerCase();
 }
 
-// The custom color/tag library now lives in the account (DB) and is passed in
-// as props; these caps just bound how much we keep client-side.
+// The custom color library now lives in the account (DB) and is passed in
+// as props; this cap just bounds how much we keep client-side.
 const MAX_CUSTOM = 24;
 const MAX_CUSTOM_TAGS = 40;
-
-/** Strip leading #, collapse whitespace. Returns null if nothing is left. */
-function normalizeTag(raw: string): string | null {
-  const cleaned = raw.trim().replace(/^#+/, "").replace(/\s+/g, "");
-  return cleaned || null;
-}
 
 const SUGGESTED_EMOJI = [
   "📚", "💪", "🏃", "🧘", "📝", "💻", "🎨", "🎵",
   "📷", "🎮", "🍎", "💧", "☕", "🛏️", "🌱", "🐕",
   "✨", "🔥", "⭐", "💎", "🎯", "🚀", "💡", "✅",
-];
-
-const SUGGESTED_TAGS = [
-  "workout", "study", "reading", "work", "hobby", "health", "morning", "evening",
 ];
 
 export function TemplateDialog({
@@ -107,7 +103,7 @@ export function TemplateDialog({
   const [color, setColor] = useState(initialColor);
   const [emoji, setEmoji] = useState(initialEmoji);
   const [tags, setTags] = useState<string[]>(initialTags);
-  const [tagInput, setTagInput] = useState("");
+  const tagsRef = useRef<TagsFieldHandle>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [hexInput, setHexInput] = useState("");
@@ -161,21 +157,6 @@ export function TemplateDialog({
     }
   }
 
-  /** Add a tag to the account library (skips presets and duplicates). */
-  function addCustomTag(raw: string) {
-    const n = normalizeTag(raw);
-    if (!n) return;
-    const lc = n.toLowerCase();
-    if (SUGGESTED_TAGS.some((p) => p.toLowerCase() === lc)) return;
-    if (customTags.some((x) => x.toLowerCase() === lc)) return;
-    onCustomTagsChange([...customTags, n].slice(-MAX_CUSTOM_TAGS));
-  }
-
-  /** Remove a tag from the account library (does not touch the routine's tags). */
-  function removeCustomTag(t: string) {
-    const lc = t.toLowerCase();
-    onCustomTagsChange(customTags.filter((x) => x.toLowerCase() !== lc));
-  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -240,45 +221,13 @@ export function TemplateDialog({
     setShowColorPicker(false);
   }
 
-  function addTag(raw: string) {
-    const cleaned = raw.trim().replace(/^#+/, "").replace(/\s+/g, "");
-    if (!cleaned) return;
-    if (tags.some((t) => t.toLowerCase() === cleaned.toLowerCase())) return;
-    if (tags.length >= 20) return;
-    setTags((prev) => [...prev, cleaned]);
-  }
-
-  function commitTagInput() {
-    if (!tagInput.trim()) return;
-    // Allow comma-separated paste like "운동,건강,#오늘". New tags are added to
-    // the routine AND saved to the shared library so they're reusable later.
-    tagInput.split(/[,\s]+/).forEach((piece) => {
-      addTag(piece);
-      addCustomTag(piece);
-    });
-    setTagInput("");
-  }
-
-  function removeTag(t: string) {
-    setTags((prev) => prev.filter((x) => x !== t));
-  }
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) {
       setError("Name is required.");
       return;
     }
-    // Drain any unconfirmed text in the tag input before saving.
-    const draftTags = [...tags];
-    if (tagInput.trim()) {
-      tagInput.split(/[,\s]+/).forEach((piece) => {
-        const cleaned = piece.trim().replace(/^#+/, "").replace(/\s+/g, "");
-        if (cleaned && !draftTags.some((t) => t.toLowerCase() === cleaned.toLowerCase())) {
-          draftTags.push(cleaned);
-        }
-      });
-    }
+    const finalTags = tagsRef.current?.flush() ?? tags;
     setBusy(true);
     setError(null);
     try {
@@ -286,7 +235,7 @@ export function TemplateDialog({
         title,
         color,
         emoji: emoji.trim() || null,
-        tags: draftTags,
+        tags: finalTags,
       };
       if (mode.kind === "create") {
         await onCreate(payload);
@@ -387,85 +336,13 @@ export function TemplateDialog({
           {/* Tags */}
           <div>
             <label className="block text-sm font-bold mb-1.5">Tags</label>
-            {tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {tags.map((t) => (
-                  <span
-                    key={t}
-                    className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-lime px-2 py-0.5 text-xs font-bold"
-                  >
-                    #{t}
-                    <button
-                      type="button"
-                      onClick={() => removeTag(t)}
-                      className="hover:bg-ink hover:text-lime rounded-full w-4 h-4 inline-flex items-center justify-center text-[10px] leading-none"
-                      aria-label={`Remove tag ${t}`}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <input
-              type="text"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === ",") {
-                  e.preventDefault();
-                  commitTagInput();
-                } else if (e.key === "Backspace" && !tagInput && tags.length > 0) {
-                  setTags((prev) => prev.slice(0, -1));
-                }
-              }}
-              onBlur={commitTagInput}
-              placeholder="#workout, #health — press Enter or comma"
-              className="input-brut"
-              maxLength={50}
+            <TagsField
+              ref={tagsRef}
+              tags={tags}
+              onTagsChange={setTags}
+              customTags={customTags}
+              onCustomTagsChange={onCustomTagsChange}
             />
-            {(() => {
-              const lcs = (s: string) => s.toLowerCase();
-              const selected = new Set(tags.map(lcs));
-              const items = [
-                ...SUGGESTED_TAGS.map((t) => ({ tag: t, custom: false })),
-                ...customTags
-                  .filter((t) => !SUGGESTED_TAGS.some((p) => lcs(p) === lcs(t)))
-                  .map((t) => ({ tag: t, custom: true })),
-              ].filter(({ tag }) => !selected.has(lcs(tag)));
-              if (items.length === 0) return null;
-              const chipCls =
-                "text-xs font-bold rounded-full border-2 border-ink/30 px-2 py-0.5 hover:border-ink hover:bg-lime transition text-ink/60 hover:text-ink";
-              return (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {items.map(({ tag, custom }) =>
-                    custom ? (
-                      <span key={tag} className="relative group inline-flex">
-                        <button type="button" onClick={() => addTag(tag)} className={chipCls}>
-                          +#{tag}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeCustomTag(tag);
-                          }}
-                          aria-label={`Remove ${tag} from list`}
-                          title="Remove from list"
-                          className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full border-2 border-ink bg-white text-[10px] leading-none font-bold opacity-0 group-hover:opacity-100 focus:opacity-100 transition flex items-center justify-center"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ) : (
-                      <button key={tag} type="button" onClick={() => addTag(tag)} className={chipCls}>
-                        +#{tag}
-                      </button>
-                    ),
-                  )}
-                </div>
-              );
-            })()}
           </div>
 
           {/* Color */}

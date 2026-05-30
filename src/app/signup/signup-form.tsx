@@ -20,15 +20,17 @@ export function SignupForm() {
     setLoading(true);
     const supabase = createClient();
     const { data, error } = await supabase.auth.signUp({ email, password });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       setError(error.message);
       return;
     }
     if (data.session) {
+      // Keep `loading` on through the navigation — see login-form for context.
       router.replace("/");
       router.refresh();
     } else {
+      setLoading(false);
       setInfo("Confirmation email sent. Verify your email, then sign in.");
     }
   }
