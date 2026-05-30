@@ -59,50 +59,71 @@ export const TagsField = forwardRef<TagsFieldHandle, Props>(function TagsField(
     onTagsChange(tags.filter((x) => x !== t));
   }
 
-  function addCustomTag(raw: string) {
-    const n = normalizeTag(raw);
-    if (!n) return;
-    const lc = n.toLowerCase();
-    if (SUGGESTED_TAGS.some((p) => p.toLowerCase() === lc)) return;
-    if (customTags.some((x) => x.toLowerCase() === lc)) return;
-    onCustomTagsChange([...customTags, n].slice(-MAX_CUSTOM_TAGS));
-  }
-
   function removeCustomTag(t: string) {
     const lc = t.toLowerCase();
     onCustomTagsChange(customTags.filter((x) => x.toLowerCase() !== lc));
   }
 
+  /**
+   * Parse a comma/space-separated input into pieces and return the lists
+   * that need to be appended to `tags` and `customTags`. Computes both
+   * synchronously from a single read of the current state so callers can
+   * make one onTagsChange + one onCustomTagsChange call — calling
+   * addTag/addCustomTag in a loop instead would batch React state updates
+   * with stale closures and only the last piece would survive.
+   */
+  function planAdditions(raw: string): {
+    nextTags: string[];
+    nextCustomTags: string[];
+  } {
+    const tagsLc = new Set(tags.map((t) => t.toLowerCase()));
+    const knownLc = new Set([
+      ...SUGGESTED_TAGS.map((t) => t.toLowerCase()),
+      ...customTags.map((t) => t.toLowerCase()),
+    ]);
+    const nextTags = [...tags];
+    const nextCustomTags = [...customTags];
+    raw.split(/[,\s]+/).forEach((piece) => {
+      const n = normalizeTag(piece);
+      if (!n) return;
+      const lc = n.toLowerCase();
+      if (!tagsLc.has(lc) && nextTags.length < MAX_TAGS) {
+        tagsLc.add(lc);
+        nextTags.push(n);
+      }
+      if (!knownLc.has(lc)) {
+        knownLc.add(lc);
+        nextCustomTags.push(n);
+      }
+    });
+    return { nextTags, nextCustomTags };
+  }
+
   function commitTagInput() {
     if (!tagInput.trim()) return;
-    tagInput.split(/[,\s]+/).forEach((piece) => {
-      addTag(piece);
-      addCustomTag(piece);
-    });
+    const { nextTags, nextCustomTags } = planAdditions(tagInput);
+    if (nextTags.length !== tags.length) onTagsChange(nextTags);
+    if (nextCustomTags.length !== customTags.length) {
+      onCustomTagsChange(nextCustomTags.slice(-MAX_CUSTOM_TAGS));
+    }
     setTagInput("");
   }
 
-  // Drain unflushed text. We can't rely on the existing onTagsChange callback
-  // here because React batches setTags from commitTagInput; the parent's
-  // submit handler reads stale state. So we return the merged list directly
-  // for the parent to use synchronously.
+  // Drain unflushed text. We compute the merged list locally and return
+  // it so the parent's submit handler can use it synchronously without
+  // waiting for React to flush the setTags from inside commitTagInput.
   useImperativeHandle(
     ref,
     () => ({
       flush(): string[] {
         if (!tagInput.trim()) return tags;
-        const merged = [...tags];
-        tagInput.split(/[,\s]+/).forEach((piece) => {
-          const n = normalizeTag(piece);
-          if (!n) return;
-          if (merged.some((t) => t.toLowerCase() === n.toLowerCase())) return;
-          if (merged.length >= MAX_TAGS) return;
-          merged.push(n);
-          addCustomTag(n);
-        });
-        onTagsChange(merged);
+        const { nextTags, nextCustomTags } = planAdditions(tagInput);
+        if (nextTags.length !== tags.length) onTagsChange(nextTags);
+        if (nextCustomTags.length !== customTags.length) {
+          onCustomTagsChange(nextCustomTags.slice(-MAX_CUSTOM_TAGS));
+        }
         setTagInput("");
-        return merged;
+        return nextTags;
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
