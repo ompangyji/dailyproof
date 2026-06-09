@@ -34,6 +34,9 @@ supabase/프로젝트 비밀번호.txt
 /favicon.png
 /favicon.zip
 
+# docs screenshots (kept locally, not committed)
+/docs/screenshots/
+
 # vercel
 .vercel
 
