@@ -168,3 +168,24 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - 여기서 토큰 = `NOTION_TOKEN`(Notion API 인증 키). 아직 발급·등록 전이라, 등록 전까지는 push 시 워크플로가 ❌ 실패하지 않도록 토큰 부재 시 조용히 skip하게 가드를 둠.
 - 실제 sync 스크립트(`scripts/notion-sync.mjs`)는 추후 구현. 토큰을 GitHub Secrets에 등록하면 가드가 풀려 실제 sync가 동작.
+
+## 2026-06-10
+
+### 1. Notion sync 파이프라인 구현 (push→Notion 자동 생성)
+
+**한 일**
+
+- `scripts/notion-sync.mjs` 구현: 마크다운→Notion 블록 변환기 + upsert 동기화. 헤딩·문단·굵게/코드/링크·목록·체크박스·인용·표·코드블록(mermaid 보존)·구분선 지원.
+- `docs/` 트리를 **폴더 구조로 미러링**(폴더=컨테이너 페이지, 파일=잎 페이지). 상태 파일 없이 부모 페이지의 child_page 제목으로 매칭(stateless).
+- `.github/workflows/notion-sync.yml` 완성: 변경된 `docs/**/*.md`만 git diff로 골라 동기화, 토큰 부재 시 skip.
+- `@notionhq/client` 의존성 + `npm run notion:sync` 스크립트 추가. 로컬에서 실제 Notion 생성/중첩 구조 검증 완료.
+
+**핵심 결정**
+
+- 외부 변환 라이브러리(martian 등)는 WSL `/mnt/d`의 chmod 제약으로 설치 실패 → 의존성을 `@notionhq/client` 하나로 줄이고 변환기를 직접 구현.
+- 매핑은 매니페스트 파일 대신 **stateless child_page 조회**로 결정(CI에서 커밋백 불필요).
+- 갱신 시 문서 페이지의 **본문 블록만 교체** → 수동으로 단 이모지/아이콘은 보존(단, 페이지 제목은 매칭 키라 직접 변경 금지).
+
+**비고**
+
+- 다음: GitHub Secrets(`NOTION_TOKEN`, `NOTION_PARENT_PAGE_ID`) 등록 시 push 자동 동기화 활성화.
