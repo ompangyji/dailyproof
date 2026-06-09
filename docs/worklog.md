@@ -189,3 +189,20 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **비고**
 
 - 다음: GitHub Secrets(`NOTION_TOKEN`, `NOTION_PARENT_PAGE_ID`) 등록 시 push 자동 동기화 활성화.
+
+### 2. GitHub Secrets 등록 · 자동 동기화 활성화
+
+**한 일**
+
+- GitHub repo(ompangyji/dailyproof) → Settings → Secrets and variables → Actions에 `NOTION_TOKEN`, `NOTION_PARENT_PAGE_ID` 등록.
+- 이로써 `docs/**` push 시 `notion-sync` 워크플로가 토큰 가드를 통과해 실제 동기화를 수행하도록 활성화.
+- `gh` CLI 미설치라 시크릿 등록은 웹 UI로 진행.
+
+**확인 방법**
+
+- push 후 repo의 Actions 탭에서 `notion-sync` 실행 성공(초록) 확인.
+- Notion 부모 페이지에서 변경 문서 갱신 확인.
+
+**비고**
+
+- 시크릿 등록 → push 순서를 지켜야 첫 push에서 바로 동기화됨(반대면 첫 실행은 skip).
