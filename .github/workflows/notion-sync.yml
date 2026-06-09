@@ -1,7 +1,8 @@
 # docs -> Notion 단방향 동기화
 #
 # 설계: docs/plan/notion-sync.md · 스크립트: scripts/notion-sync.mjs
-# main 브랜치에 docs/** 가 push되면 변경된 마크다운을 Notion에 upsert 한다.
+# main에 docs/** 가 push되면 변경된 마크다운을 Notion에 upsert 한다.
+# 수동 실행(workflow_dispatch) 시에는 docs 전체를 동기화한다.
 # NOTION_TOKEN 시크릿이 없으면 조용히 skip 하여 실패하지 않는다.
 name: notion-sync
 
@@ -10,8 +11,8 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+  workflow_dispatch: {} # 수동 실행 -> 전체 동기화
 
-# 최신 push만 반영 (중복 실행 취소)
 concurrency:
   group: notion-sync
   cancel-in-progress: true
@@ -24,9 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
-          fetch-depth: 2 # 직전 커밋과 비교해 변경 파일 산출
+          fetch-depth: 0 # before..sha diff를 위해 전체 히스토리
 
       - name: Guard - NOTION_TOKEN 존재 여부 확인
         id: guard
@@ -42,22 +43,31 @@ jobs:
 
       - name: Setup Node
         if: steps.guard.outputs.enabled == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install deps
         if: steps.guard.outputs.enabled == 'true'
         run: npm ci
 
-      - name: 변경된 docs 마크다운 산출
+      - name: 동기화 대상 마크다운 산출
         if: steps.guard.outputs.enabled == 'true'
         id: changed
         run: |
-          files=$(git diff --name-only --diff-filter=ACMR "${{ github.event.before }}" "${{ github.sha }}" -- 'docs/**/*.md' | tr '\n' ' ')
+          before="${{ github.event.before }}"
+          # 수동 실행 / 첫 push / before 미존재 -> docs 전체, 그 외 -> 변경분 diff
+          if [ "${{ github.event_name }}" != "push" ] \
+             || [ -z "$before" ] \
+             || [ "$before" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+            files=$(git ls-files -- ':(glob)docs/**/*.md' | tr '\n' ' ')
+          else
+            files=$(git diff --name-only --diff-filter=ACMR "$before" "${{ github.sha }}" -- ':(glob)docs/**/*.md' | tr '\n' ' ')
+          fi
           echo "files=$files" >> "$GITHUB_OUTPUT"
-          echo "변경 파일: $files"
+          echo "동기화 대상: ${files:-(없음)}"
 
       - name: Sync docs to Notion
         if: steps.guard.outputs.enabled == 'true' && steps.changed.outputs.files != ''
