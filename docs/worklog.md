@@ -169,9 +169,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - 여기서 토큰 = `NOTION_TOKEN`(Notion API 인증 키). 아직 발급·등록 전이라, 등록 전까지는 push 시 워크플로가 ❌ 실패하지 않도록 토큰 부재 시 조용히 skip하게 가드를 둠.
 - 실제 sync 스크립트(`scripts/notion-sync.mjs`)는 추후 구현. 토큰을 GitHub Secrets에 등록하면 가드가 풀려 실제 sync가 동작.
 
-## 2026-06-10
-
-### 1. Notion sync 파이프라인 구현 (push→Notion 자동 생성)
+### 9. Notion sync 파이프라인 구현 (push→Notion 자동 생성)
 
 **한 일**
 
@@ -190,7 +188,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - 다음: GitHub Secrets(`NOTION_TOKEN`, `NOTION_PARENT_PAGE_ID`) 등록 시 push 자동 동기화 활성화.
 
-### 2. GitHub Secrets 등록 · 자동 동기화 활성화
+### 10. GitHub Secrets 등록 · 자동 동기화 활성화
 
 **한 일**
 
