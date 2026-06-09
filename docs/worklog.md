@@ -117,3 +117,54 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 | 수락↔ready 지연 | 지연 관측·SLO | latency 측정, **트레이스로 web→worker→DB 구간 추적** |
 | worker 다운/메모리 부족 | 장애 복구 | **pod 재시작 장애**, 복구 runbook |
 | staging→smoke→prod | 안전 배포 | 배포 자동화 + 롤백 시연(ArgoCD revision) |
+
+### 6. 환경 분리 전략 초안
+
+**한 일**
+
+- `docs/architecture/environments.md` 작성: dev/staging/prod 정의, 분리 수단(app config·K8s namespace·GitHub Environment·도메인), 환경별 차이 매트릭스, 환경 변수 정리, 시크릿 주입 지점, Supabase 분리 제약, 예상 매니페스트 구조.
+
+**핵심 결정**
+
+- 분리 원칙은 "코드/이미지는 동일, 환경별 주입값만 다름"(stateless·12-factor). K8s는 네임스페이스 + Kustomize overlays(또는 Helm values)로 분리.
+- 승격 흐름: dev(로컬) → staging 자동 배포 → smoke 통과 → prod 수동 승인.
+- worker 도입으로 **서버 전용 시크릿**(`SUPABASE_SERVICE_ROLE_KEY` 등)이 처음 등장 → 로컬 `.env.local`, staging/prod는 K8s Secret, CI는 GitHub Environment로 분리 주입.
+- Supabase는 이상적으로 환경별 별도 프로젝트, 계정 제약 시 단일 프로젝트+키/스키마 분리로 차선. 실제 선택은 컨테이너화·k3s 배포 구축 단계에서 확정해 기록.
+
+### 7. proof_assets / jobs DB 스키마 초안
+
+**한 일**
+
+- `supabase/proof_assets.draft.sql` 작성: 자산 상태 모델 `proof_assets` + 작업 큐 `jobs` 초안. 기존 `schema.sql` 컨벤션(멱등·RLS owner-only·touch_updated_at 트리거·인덱스) 준수.
+- `proof_assets`: source_path·kind·status(uploaded/processing/ready/failed)·메타데이터(content_type/size/width/height/checksum/thumb_path)·error_code/message.
+- `jobs`: asset_id·status(pending/processing/done/failed)·attempts/max_attempts·run_after(백오프)·locked_at/locked_by(선점).
+
+**핵심 설계**
+
+- 큐는 외부 브로커 없이 **DB job table + polling**. `claim_job(worker)` 함수에서 **FOR UPDATE SKIP LOCKED**로 다중 worker 동시성 안전 확보.
+- 폴링 성능: `jobs_pending_idx`(부분 인덱스, status='pending'), 적체 측정용 `jobs_status_idx`(= `queue_depth` 지표 근거).
+- worker는 **SERVICE_ROLE 키로 RLS 우회**(environments.md의 서버 전용 시크릿과 연결), 사용자는 RLS owner-only로 자기 자산 상태만 조회.
+- 중복 탐지용 `proof_assets_checksum_idx`(user_id, checksum).
+
+**비고**
+
+- 이 파일은 설계 **초안**(`.draft.sql`)이다. 실제 적용은 worker 구현 단계에서 schema.sql 통합/마이그레이션으로 반영.
+
+### 8. Notion sync 구조 설계 + workflow 초안
+
+**한 일**
+
+- `docs/plan/notion-sync.md` 작성: docs→Notion 단방향 동기화 설계(원칙·흐름·페이지 매핑·마크다운 변환·시크릿·미결 사항).
+- `.github/workflows/notion-sync.yml` 초안: `push` + `paths: docs/**` 트리거, `NOTION_TOKEN` 미설정 시 조용히 skip(실패 방지), concurrency로 중복 실행 취소.
+
+**핵심 설계**
+
+- 단방향(repo→Notion), source of truth는 repo. Notion은 공유/열람 채널.
+- 멱등 갱신을 위해 파일경로↔Notion pageId 매핑 필요 → 1순위는 매니페스트(`docs/.notion-map.json`).
+- Mermaid는 Notion 네이티브 렌더링 불가 → 코드 블록 보존 또는 이미지 변환(구현 시 결정).
+- sync 실패가 배포를 막지 않도록 배포 파이프라인과 분리.
+
+**비고**
+
+- 여기서 토큰 = `NOTION_TOKEN`(Notion API 인증 키). 아직 발급·등록 전이라, 등록 전까지는 push 시 워크플로가 ❌ 실패하지 않도록 토큰 부재 시 조용히 skip하게 가드를 둠.
+- 실제 sync 스크립트(`scripts/notion-sync.mjs`)는 추후 구현. 토큰을 GitHub Secrets에 등록하면 가드가 풀려 실제 sync가 동작.

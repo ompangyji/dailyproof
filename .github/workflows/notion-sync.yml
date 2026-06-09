@@ -1,0 +1,55 @@
+# docs -> Notion 단방향 동기화 (초안 / DRAFT)
+#
+# 설계: docs/plan/notion-sync.md
+# 상태: 초안. 실제 동기화 스크립트(scripts/notion-sync.mjs)는 추후 구현한다.
+#       그 전까지 NOTION_TOKEN 시크릿이 없으면 조용히 skip 하여 실패하지 않는다.
+name: notion-sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+
+# 최신 push만 반영 (중복 실행 취소)
+concurrency:
+  group: notion-sync
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard - NOTION_TOKEN 존재 여부 확인
+        id: guard
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: |
+          if [ -z "$NOTION_TOKEN" ]; then
+            echo "NOTION_TOKEN 미설정 - sync 스킵 (초안 단계)"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        if: steps.guard.outputs.enabled == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 추후 구현: scripts/notion-sync.mjs (docs/** -> Notion upsert)
+      - name: Sync docs to Notion
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_PARENT_PAGE_ID: ${{ secrets.NOTION_PARENT_PAGE_ID }}
+        run: |
+          # node scripts/notion-sync.mjs
+          echo "TODO: notion-sync 스크립트 구현 후 활성화"

@@ -75,10 +75,10 @@
 
 - [x] `worklog.md` — 날짜별 작업 진행 기록
 - [x] `plan/gap-analysis.md` — 현재 구현 vs 목표 DevOps 범위 gap + 직접 구현/문서 대체 구분
-- [ ] `plan/roadmap.md` — 14일 일정
 - [x] `architecture/current-state.md` — 현재 프로젝트 구조 분석
 - [x] `architecture/target-architecture.md` — 목표 아키텍처 + 핵심 시나리오
-- [ ] `architecture/environments.md` — dev/staging/prod 환경 분리 전략
+- [x] `architecture/environments.md` — dev/staging/prod 환경 분리 전략
+- [x] `plan/notion-sync.md` — docs→Notion 동기화 설계 (+ `.github/workflows/notion-sync.yml` 초안)
 - [ ] `runbooks/` — health check, rollback, ops runbook
 - [ ] `incidents/incident-log.md` — 장애 재현 기록
 - [ ] `performance/performance.md` — 성능 테스트 결과

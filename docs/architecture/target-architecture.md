@@ -167,4 +167,3 @@ stateless 컨테이너·외부 시크릿 주입·object storage 분리를 유지
 
 - [Day1-6] `architecture/environments.md` — dev/staging/prod 환경 분리 전략
 - [Day1-7] `proof_assets`/`jobs` DB 스키마 초안
-- [Day1-8] `plan/roadmap.md` — 위 구조를 14일 일정으로 묶기
