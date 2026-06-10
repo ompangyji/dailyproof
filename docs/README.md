@@ -76,7 +76,8 @@
 - [x] `worklog.md` — 날짜별 작업 진행 기록
 - [x] `plan/gap-analysis.md` — 현재 구현 vs 목표 DevOps 범위 gap + 직접 구현/문서 대체 구분
 - [x] `architecture/current-state.md` — 현재 프로젝트 구조 분석
-- [x] `architecture/data-model.md` — DB ERD (proof_assets/jobs 통합 전·후)
+- [x] `architecture/erd-before.md` — DB ERD (proof_assets/jobs 통합 전)
+- [x] `architecture/erd-after.md` — DB ERD (proof_assets/jobs 추가 후)
 - [x] `architecture/target-architecture.md` — 목표 아키텍처 + 핵심 시나리오
 - [x] `architecture/environments.md` — dev/staging/prod 환경 분리 전략
 - [x] `architecture/branching.md` — 브랜치 전략(GitHub Flow + 환경 승격)

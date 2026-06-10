@@ -270,8 +270,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **ERD 문서화**
 
-- `docs/architecture/data-model.md` 작성: 통합 **전(6테이블) / 후(+proof_assets+jobs)** ERD를 mermaid `erDiagram`으로 남김. 스크린샷이 아니라 다이어그램 as 코드라 변화가 커밋 diff로 남고 GitHub/Notion에 렌더된다.
-- 보조로 Supabase Schema Visualizer SVG를 before/after로 캡처(시각 보조, git 미추적).
+- 통합 전/후 ERD를 **mermaid `erDiagram`로, 각각 별도 md 파일**로 남김. 스크린샷이 아니라 다이어그램 as 코드라 변화가 커밋 diff로 남고 GitHub/Notion에 렌더된다.
 
 **적용 방법 / 비고**
 
@@ -279,8 +278,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - 적용 후 확인: `proof_assets`/`jobs` 테이블 생성, RLS 활성화, `claim_job` 함수 존재.
 - 데이터 흐름(업로드 시 asset+job 생성)은 다음 작업에서 코드로 연결.
 
-**증거**
+**자료**
 
-- `004-db-tables-before-20260610.svg` — 통합 전 테이블 구조
-- `005-db-tables-after-20260610.svg` — proof_assets/jobs 추가 후
-- (구조의 source of truth는 `docs/architecture/data-model.md` ERD)
+- `docs/architecture/erd-before.md` — 통합 전 ERD (기존 6테이블)
+- `docs/architecture/erd-after.md` — 추가 후 ERD (+proof_assets, jobs)
