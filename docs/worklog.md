@@ -237,7 +237,50 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `feature/async-pipeline` — proof_assets/jobs 스키마부터 업로드→job 생성까지의 비동기 파이프라인 작업 단위.
 
+**목적 (왜 1인 프로젝트인데 이 흐름을 따르나)**
+
+- 혼자 하는 프로젝트라 사실 `main`에 바로 커밋해도 동작에는 지장이 없다. 그럼에도 `feature/* → push → PR → (검토/CI) → main merge → 자동 배포`라는 실무 표준 흐름을 그대로 밟는다.
+- 이유: 이 포트폴리오의 목표는 "기능을 만든다"가 아니라 **"실무 DevOps 운영 흐름을 이해하고 실제로 수행했다"를 기록하는 것**이다. PR 기록·CI 통과·merge 단위가 그 자체로 산출물이 된다.
+- 부수 효과: 변경이 PR 단위로 끊겨 기록되고, CI가 깨진 코드의 main 진입을 막아주며, `main = 항상 배포 가능`이 유지돼 뒤에서 붙일 자동 배포(ArgoCD)의 트리거가 깔끔해진다.
+- 즉 지금 단계는 자동화를 만든 게 아니라, **그 자동화가 올라탈 규칙과 흐름(레일)을 먼저 깐 것**이다.
+
 **비고**
 
-- 전략 도입 변경은 규칙 적용 이전이라 main에 직접 커밋(부트스트랩)하고, 이후 코드 작업부터 `feature/*` + PR 흐름을 따른다.
+- 전략 도입 변경(이 규칙을 정의한 첫 커밋)은 규칙이 적용되기 전이라 어쩔 수 없이 main에 직접 커밋했고, 이후 코드 작업부터 `feature/*` + PR 흐름을 따른다.
 - 브랜치 보호·CI 게이트·prod 승인 등 자동화는 GitHub Actions / GitHub Environment / ArgoCD 구축 단계에서 이 규칙에 맞춰 실제 연결.
+
+### 2. proof_assets / jobs 스키마 통합 (schema.sql 반영)
+
+**한 일**
+
+- 06-09에 만든 초안 `supabase/proof_assets.draft.sql`을 정식 `supabase/schema.sql` 끝에 **통합**하고 draft 파일은 제거(단일 소스 유지).
+- 통합 시 중복 제거: `create extension pgcrypto`, `touch_updated_at()` 함수는 schema.sql 상단에 이미 있어 재정의하지 않고 재사용.
+- 멱등·additive 컨벤션 유지(`create table if not exists`, `create index if not exists`, `drop policy ... + create policy`).
+
+**핵심 설계 (초안에서 그대로 가져온 것)**
+
+- `proof_assets`: 업로드 자산의 처리 상태(`uploaded→processing→ready→failed`) + 후처리 메타데이터(content_type/size/width/height/checksum/thumb_path) + 실패정보.
+- `jobs`: 자산당 후처리 작업 큐. `attempts/max_attempts`(재시도), `run_after`(백오프), `locked_at/locked_by`(선점). 외부 브로커 없이 DB 큐 + polling.
+- `claim_job(worker)`: `FOR UPDATE SKIP LOCKED`로 다중 worker가 같은 job을 잡지 않게 1건 선점.
+- 인덱스: `jobs_pending_idx`(pending 부분 인덱스, 폴링), `jobs_status_idx`(`queue_depth` 지표), `proof_assets_checksum_idx`(중복 탐지).
+
+**통합하며 보강한 점**
+
+- `claim_job`의 실행 권한을 명시적으로 잠금: Postgres는 함수에 기본적으로 PUBLIC EXECUTE를 주므로, `revoke all ... from public` 후 `grant execute ... to service_role`로 **워커(service_role)만 큐를 선점**할 수 있게 했다. authenticated 사용자가 큐를 조작하는 경로를 차단.
+
+**ERD 문서화**
+
+- `docs/architecture/data-model.md` 작성: 통합 **전(6테이블) / 후(+proof_assets+jobs)** ERD를 mermaid `erDiagram`으로 남김. 스크린샷이 아니라 다이어그램 as 코드라 변화가 커밋 diff로 남고 GitHub/Notion에 렌더된다.
+- 보조로 Supabase Schema Visualizer SVG를 before/after로 캡처(시각 보조, git 미추적).
+
+**적용 방법 / 비고**
+
+- 로컬에 psql·supabase CLI가 없어 자동 적용은 불가 → **Supabase SQL Editor에서 `schema.sql` 실행**으로 반영(멱등이라 전체 재실행해도 안전, 신규 객체만 추가됨). 적용 완료.
+- 적용 후 확인: `proof_assets`/`jobs` 테이블 생성, RLS 활성화, `claim_job` 함수 존재.
+- 데이터 흐름(업로드 시 asset+job 생성)은 다음 작업에서 코드로 연결.
+
+**증거**
+
+- `004-db-tables-before-20260610.svg` — 통합 전 테이블 구조
+- `005-db-tables-after-20260610.svg` — proof_assets/jobs 추가 후
+- (구조의 source of truth는 `docs/architecture/data-model.md` ERD)
