@@ -78,6 +78,7 @@
 - [x] `architecture/current-state.md` — 현재 프로젝트 구조 분석
 - [x] `architecture/target-architecture.md` — 목표 아키텍처 + 핵심 시나리오
 - [x] `architecture/environments.md` — dev/staging/prod 환경 분리 전략
+- [x] `architecture/branching.md` — 브랜치 전략(GitHub Flow + 환경 승격)
 - [x] `plan/notion-sync.md` — docs→Notion 동기화 설계 (구현: `scripts/notion-sync.mjs` + `.github/workflows/notion-sync.yml`)
 - [ ] `runbooks/` — health check, rollback, ops runbook
 - [ ] `incidents/incident-log.md` — 장애 재현 기록

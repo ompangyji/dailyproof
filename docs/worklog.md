@@ -43,11 +43,11 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **핵심 파악 — 이미 확보된 강점 (DevOps 출발점)**
 
-- *파일 업로드 기반이 이미 있다.* 업로드(`lib/supabase/upload.ts`)에 MIME 검사(`image/*`), 8MB 크기 제한, 확장자 sanitize가 들어가 있고, 저장 경로가 `media/<userId>/<kind>/<uuid>.<ext>`로 사용자별 격리된다. → 파일 저장소 정책·인증 접근 제어·업로드 실패 처리·크기 제한·캐시 정책·후처리 같은 운영 실습으로 자연스럽게 확장 가능.
-- *인증된 접근 제어가 구현돼 있다.* 비공개 `media` 버킷을 `/api/media` 프록시가 사용자 세션으로 download → Storage RLS(`media: read own`)가 게이트. 비소유자/익명은 404. 서명 URL 만료가 없어 Tiptap 본문에서도 안정적.
-- *공개/비공개 표면이 분리돼 있다.* 외부 임베드(`/api/grass/[token]`)는 추측 불가능한 토큰 + `get_grass` SECURITY DEFINER 함수로 **일자별 카운트만** 노출(원본 행 비노출), CORS·캐시(`s-maxage`, `swr`) 정책까지 표면별로 구분돼 있다.
-- *운영 포인트가 명확하다.* 업로드 성공률, 업로드 후 처리 지연, DB 응답 시간, 사용자별 권한 문제, 미디어 프록시 응답 성능, 재배포 시 세션/환경변수/스토리지 연동 문제 등 실제 운영에서 측정·관측할 지점이 이미 코드 상에 존재한다.
-- *멱등·안전 재실행 가능한 스키마.* `schema.sql`이 `if not exists` + additive migration + `updated_at` 트리거 + GIN/복합 인덱스를 갖춰 운영 변경에 견딘다.
+- 파일 업로드 기반이 이미 있다. 업로드(`lib/supabase/upload.ts`)에 MIME 검사(`image/*`), 8MB 크기 제한, 확장자 sanitize가 들어가 있고, 저장 경로가 `media/<userId>/<kind>/<uuid>.<ext>`로 사용자별 격리된다. → 파일 저장소 정책·인증 접근 제어·업로드 실패 처리·크기 제한·캐시 정책·후처리 같은 운영 실습으로 자연스럽게 확장 가능.
+- 인증된 접근 제어가 구현돼 있다. 비공개 `media` 버킷을 `/api/media` 프록시가 사용자 세션으로 download → Storage RLS(`media: read own`)가 게이트. 비소유자/익명은 404. 서명 URL 만료가 없어 Tiptap 본문에서도 안정적.
+- 공개/비공개 표면이 분리돼 있다. 외부 임베드(`/api/grass/[token]`)는 추측 불가능한 토큰 + `get_grass` SECURITY DEFINER 함수로 **일자별 카운트만** 노출(원본 행 비노출), CORS·캐시(`s-maxage`, `swr`) 정책까지 표면별로 구분돼 있다.
+- 운영 포인트가 명확하다. 업로드 성공률, 업로드 후 처리 지연, DB 응답 시간, 사용자별 권한 문제, 미디어 프록시 응답 성능, 재배포 시 세션/환경변수/스토리지 연동 문제 등 실제 운영에서 측정·관측할 지점이 이미 코드 상에 존재한다.
+- 멱등·안전 재실행 가능한 스키마. `schema.sql`이 `if not exists` + additive migration + `updated_at` 트리거 + GIN/복합 인덱스를 갖춰 운영 변경에 견딘다.
 
 **핵심 파악 — 부족한 점 (의도적으로 추가해야 할 운영 요소)**
 
@@ -204,3 +204,40 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **비고**
 
 - 시크릿 등록 → push 순서를 지켜야 첫 push에서 바로 동기화됨(반대면 첫 실행은 skip).
+
+---
+
+## 2026-06-10
+
+### 1. 브랜치 전략 정의
+
+**한 일**
+
+- `docs/architecture/branching.md` 작성: 코드 작업 본격 시작 전에 브랜치 모델을 먼저 고정. 후보(GitHub Flow+환경 승격 / 트렁크 기반 / Git Flow) 비교 → **GitHub Flow + 환경 승격** 채택. 브랜치 구조·명명 규칙(`feature/*`·`fix/*`·`docs/*`·`chore/*`), 흐름(mermaid), PR·머지 규칙, 환경 분리 매핑, 적용 방침을 한 문서로 정리.
+- `docs/README.md` 인덱스에 `branching.md` 추가.
+
+**핵심 결정 — GitHub Flow + 환경 승격 채택**
+
+채택 근거:
+
+- `environments.md`의 dev→staging→prod 승격 단계와 브랜치/배포 이벤트가 1:1로 맞물린다.
+- `main = 항상 배포 가능`이 GitOps(ArgoCD)·자동배포의 전제와 일치한다.
+- 1인·2주 단기 작업이라 장수 브랜치를 둘 이유가 없다(Git Flow는 관리 비용만 늘어 제외).
+
+고정한 규칙:
+
+- `main`은 보호 브랜치 — 직접 push 금지, PR로만 반영.
+- CI 게이트(lint·build·test) 통과해야 merge 가능.
+- `main` merge = staging 자동 배포.
+- prod 승격은 수동 승인 또는 `vX.Y.Z` 태그.
+- 장애 시 ArgoCD 리비전 롤백.
+- 커밋은 Conventional Commits.
+
+**첫 작업 브랜치**
+
+- `feature/async-pipeline` — proof_assets/jobs 스키마부터 업로드→job 생성까지의 비동기 파이프라인 작업 단위.
+
+**비고**
+
+- 전략 도입 변경은 규칙 적용 이전이라 main에 직접 커밋(부트스트랩)하고, 이후 코드 작업부터 `feature/*` + PR 흐름을 따른다.
+- 브랜치 보호·CI 게이트·prod 승인 등 자동화는 GitHub Actions / GitHub Environment / ArgoCD 구축 단계에서 이 규칙에 맞춰 실제 연결.

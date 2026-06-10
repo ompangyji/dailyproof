@@ -123,5 +123,5 @@ environments/
 
 ## 8. 다음 작업
 
-- [Day1-7] `proof_assets`/`jobs` DB 스키마 초안 — 서버 전용 시크릿이 필요한 worker의 데이터 접근 설계와 연결
+- `proof_assets`/`jobs` DB 스키마 초안 — 서버 전용 시크릿이 필요한 worker의 데이터 접근 설계와 연결
 - (추후) `.env.*.example`, Kustomize overlays 실제 생성
