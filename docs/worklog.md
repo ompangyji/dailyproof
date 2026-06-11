@@ -128,6 +128,10 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `docs/architecture/target-architecture.md` 작성: 서비스 구성(web/worker/queue/storage/db/observability/ingress/gitops/ci·cd), 아키텍처 다이어그램, 핵심 시나리오, 자산 상태 전이, 관측성·네트워크 경계, [추후 AWS] 매핑.
 - Mermaid 다이어그램 3종 추가: flowchart(전체 구조), sequenceDiagram(업로드→worker→관측), stateDiagram(proof_assets 상태 전이).
 
+**목적**
+
+- 이 문서는 **"무엇을 만들지의 지도"** 다. 따로 노는 운영 요소(컨테이너·관측성·배포·비동기)를 *업로드→처리→관측*이라는 한 흐름에 묶어, 이후 모든 작업이 "이 그림의 어느 부품인가"로 설명되게 한다. 설계도 없이 부품부터 사면 안 맞듯, 전체 그림을 먼저 그려 둔 것.
+
 **핵심 결정**
 
 - 핵심 시나리오를 "업로드 → asset/job 생성 → worker 후처리(메타데이터·썸네일·해시·중복탐지) → 상태 전이 → admin/관측"으로 고정. 모든 운영 항목을 이 한 흐름에 연결.
@@ -160,6 +164,10 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `docs/architecture/environments.md` 작성: dev/staging/prod 정의, 분리 수단(app config·K8s namespace·GitHub Environment·도메인), 환경별 차이 매트릭스, 환경 변수 정리, 시크릿 주입 지점, Supabase 분리 제약, 예상 매니페스트 구조.
 
+**목적**
+
+- **"같은 코드, 다른 무대"** 를 만들기 위함. dev에서 막 굴리고 → staging에서 검증 → prod에 안전하게 올리는 *승격 통로*가 있어야 사고 없이 배포하고 문제 시 되돌릴 수 있다. 서버 전용 시크릿을 환경별로 어디서 주입할지의 기준도 여기서 선다.
+
 **핵심 결정**
 
 - 분리 원칙은 "코드/이미지는 동일, 환경별 주입값만 다름"(stateless·12-factor). K8s는 네임스페이스 + Kustomize overlays(또는 Helm values)로 분리.
@@ -180,6 +188,10 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `supabase/proof_assets.draft.sql` 작성: 자산 상태 모델 `proof_assets` + 작업 큐 `jobs` 초안. 기존 `schema.sql` 컨벤션(멱등·RLS owner-only·touch_updated_at 트리거·인덱스) 준수.
 - `proof_assets`: source_path·kind·status(uploaded/processing/ready/failed)·메타데이터(content_type/size/width/height/checksum/thumb_path)·error_code/message.
 - `jobs`: asset_id·status(pending/processing/done/failed)·attempts/max_attempts·run_after(백오프)·locked_at/locked_by(선점).
+
+**목적**
+
+- 비동기 파이프라인의 **"뼈대(데이터 모델)"** 를 먼저 세우는 일. 자산이 지금 어떤 상태인지(`proof_assets`)와 처리할 일이 줄 서 있는지(`jobs`)를 담을 그릇이 있어야, 그 위에 worker·관측·장애재현 같은 운영 이야기가 얹힌다. 그릇 없이 물을 부을 순 없다.
 
 **핵심 설계**
 
@@ -327,6 +339,10 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - 통합 시 중복 제거: `create extension pgcrypto`, `touch_updated_at()` 함수는 schema.sql 상단에 이미 있어 재정의하지 않고 재사용.
 - 멱등·additive 컨벤션 유지(`create table if not exists`, `create index if not exists`, `drop policy ... + create policy`).
 
+**목적**
+
+- 초안을 **"실제로 쓸 수 있는 상태"** 로 만드는 일. 설계도(draft)가 책상 위에만 있으면 코드가 못 기댄다 — 정식 `schema.sql`에 합쳐 Supabase에 올려야 비로소 "있는 것"이 되어, 다음 작업(업로드→asset/job 코드)이 시작될 수 있다.
+
 **핵심 설계 (초안에서 그대로 가져온 것)**
 
 - `proof_assets`: 업로드 자산의 처리 상태(`uploaded→processing→ready→failed`) + 후처리 메타데이터(content_type/size/width/height/checksum/thumb_path) + 실패정보.
@@ -401,6 +417,10 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `supabase/schema.sql`: 트리거 함수 `enqueue_proof_job` + `proof_assets_enqueue`(after insert) 추가 — 자산이 생기면 `process_image` job 1건을 자동 생성.
 - `src/lib/supabase/types.ts`: `ProofAsset`/`Job` 타입 추가.
 
+**목적**
+
+- 파이프라인의 **"입구"** 를 여는 일. 업로드라는 평범한 행동을 *추적·후처리 가능한 작업*으로 바꿔, 이후 worker가 소비할 일감(job)이 실제로 쌓이기 시작한다. 택배 접수창구를 만든 셈 — 접수가 돼야 배송(후처리)이 시작된다.
+
 **핵심 설계**
 
 - **job 생성 책임을 DB로**: 클라이언트는 `proof_assets`만 insert하고, job 생성은 트리거가 한다. asset:job = 1:1을 DB가 원자적으로 보장(클라이언트가 두 번 insert하다 한쪽만 성공하는 경우 없음). 트리거는 SECURITY DEFINER라 jobs RLS와 무관하게 항상 enqueue.
@@ -441,6 +461,10 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
   - `proof_assets`에 CHECK 제약 2개(`content_type like 'image/%'`, `size_bytes <= 8MB`) 추가 — 기록되는 메타데이터 불변식(멱등 재정의).
 - `src/lib/supabase/upload.ts`: 클라이언트 검사가 서버 한도를 미러링하는 **빠른 UX용**임을 주석으로 명시(진짜 게이트는 Storage/DB).
 
+**목적**
+
+- **"믿을 수 있는 문지기"** 를 두는 일. 브라우저(클라) 검증은 사용자가 우회할 수 있어 믿을 수 없다 — 진짜 신뢰 경계인 서버(Storage·DB)에서 막아야, 어떤 경로로 들어와도 잘못된 파일이 시스템에 남지 않는다.
+
 **핵심 설계 — 다층 검증(defense in depth)**
 
 - 1차 클라이언트(`upload.ts`): 즉각 피드백. 신뢰하지 않음.
@@ -480,7 +504,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `src/lib/supabase/middleware.ts`: 모든 요청에 `request_id` 부여(클라/프록시가 보낸 게 있으면 재사용) → 다운스트림엔 요청 헤더, 클라이언트엔 응답 헤더로 전달. 기존 Supabase 쿠키 처리 보존.
 - `src/app/api/media/[...path]/route.ts`: 로거+request_id 적용 데모 — 성공/404를 `request_id`·`route`·`object_path`·`status` 필드로 구조화 로그.
 
-**의도 / 역할 (이걸로 뭐가 되나)**
+**목적**
 
 - **request_id = 요청의 송장번호.** 한 요청은 `미들웨어→라우트→DB→스토리지`를 거치는데, 그 요청이 남기는 모든 로그에 같은 번호가 찍혀 **한 요청의 전 여정을 한 줄로 추적**할 수 있다.
 - **구조화 로그(JSON) = 검색 가능한 표.** 평문 로그는 "일기장"이라 못 하는 일 — `status=404`만 필터, `route`별 집계, 특정 `request_id` 추적 — 이 JSON 필드로 **즉시** 가능해진다.
