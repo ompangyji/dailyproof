@@ -463,3 +463,42 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
   - `017-sec-ui-server-reject-20260611.png` — 우회 상태에서 PDF 업로드 → UI에 `mime type application/pdf is not supported`. **클라를 뚫어도 Storage(서버)가 막는다**.
   - `018-sec-ui-client-reject-20260611.png` — 원복(정상) 후 같은 PDF → UI에 `Only image files are supported.`. **정상 경로에선 클라이언트가 1차로 막는다**.
 - 종합: 014/015는 설정·DB 게이트, 017/018은 같은 입력(PDF)을 **클라+서버 두 겹이 각각 차단**(016이 그 우회 조건을 설명). 다층 방어(defense in depth)가 설정·동작 모두 증명됨.
+- `019-git-pr3-open` / `020-git-pr3-merged` / `021-git-local-sync` — 이 작업을 PR #3으로 main 반영(생성→merge→로컬 동기화).
+
+### 4. request_id 주입 + 구조화 로그 유틸 초안
+
+**이전 상태 / 문제**
+
+- 서버 로깅이 사실상 없었다 — 있어도 `console.log("...")` 같은 **평문 문자열**뿐이라, 나중에 로그 수집기(Loki 등)에서 **필드로 검색·집계가 불가**했다.
+- 한 요청이 미들웨어→라우트→DB를 거치는데 이를 **묶을 식별자(request_id)가 없어**, 장애 시 "이 요청이 무슨 경로로 흘렀나"를 추적할 수 없었다.
+- → 요청마다 ID를 부여하고, 로그를 **구조화(JSON)** 로 남기는 기반 유틸을 먼저 깐다(관측성의 토대).
+
+**한 일**
+
+- `src/lib/log.ts`: 구조화 JSON 로거. 레벨(debug/info/warn/error)·`LOG_LEVEL`/`APP_ENV` 반영, error/warn은 stderr. `log.with({ request_id })`로 컨텍스트를 고정한 하위 로거 생성.
+- `src/lib/request-id.ts`: `x-request-id` 상수 + `requestIdFrom(req)`(헤더 읽거나 없으면 생성).
+- `src/lib/supabase/middleware.ts`: 모든 요청에 `request_id` 부여(클라/프록시가 보낸 게 있으면 재사용) → 다운스트림엔 요청 헤더, 클라이언트엔 응답 헤더로 전달. 기존 Supabase 쿠키 처리 보존.
+- `src/app/api/media/[...path]/route.ts`: 로거+request_id 적용 데모 — 성공/404를 `request_id`·`route`·`object_path`·`status` 필드로 구조화 로그.
+
+**의도 / 역할 (이걸로 뭐가 되나)**
+
+- **request_id = 요청의 송장번호.** 한 요청은 `미들웨어→라우트→DB→스토리지`를 거치는데, 그 요청이 남기는 모든 로그에 같은 번호가 찍혀 **한 요청의 전 여정을 한 줄로 추적**할 수 있다.
+- **구조화 로그(JSON) = 검색 가능한 표.** 평문 로그는 "일기장"이라 못 하는 일 — `status=404`만 필터, `route`별 집계, 특정 `request_id` 추적 — 이 JSON 필드로 **즉시** 가능해진다.
+- **역할: 관측성(observability)의 토대.** "안 보이면 운영할 수 없다"가 핵심. 기능이 아니라 *운영할 때 눈이 되어주는 장치*이며, 뒤에 붙일 **Loki(로그 검색)·Grafana(대시보드·알림)·worker 파이프라인 추적**이 전부 이 위에 얹힌다(나중에 OpenTelemetry `trace_id`와도 결합).
+
+**핵심 설계**
+
+- **단일 출처**: request_id는 미들웨어에서 한 번 만들고 헤더로 전파 → 모든 로그가 같은 ID를 공유해 한 요청을 상관(correlate)할 수 있다.
+- **미들웨어 미경유 경로 대비**: `/api/grass`처럼 matcher에서 빠진 경로는 `requestIdFrom`이 라우트에서 자체 생성(후속 적용 여지).
+- **초안 범위**: 유틸·주입·1개 라우트 데모까지. server actions·grass·worker 로깅 연결과 OpenTelemetry trace_id 연동은 후속.
+
+**검증 (실제 동작 확인)**
+
+- `npm run dev` 후 이미지 있는 화면 로드(Disable cache) → dev 터미널에 구조화 JSON 로그(`msg:"media served"`, `request_id`·`route`·`status` 필드) 확인.
+- 홈 페이지 응답 헤더에 `x-request-id` 부여 확인(`31316c91-...`).
+- 타입체크(`tsc --noEmit`) 통과.
+
+**자료**
+
+- `022-obs-structured-log-20260611.png` — dev 터미널의 구조화 JSON 로그(`media served` + request_id/route/status).
+- `023-obs-request-id-header-20260611.png` — 홈 페이지 응답 헤더 `X-Request-Id` 부여 확인.

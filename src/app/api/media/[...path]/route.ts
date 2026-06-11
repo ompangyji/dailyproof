@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createLogger } from "@/lib/log";
+import { requestIdFrom } from "@/lib/request-id";
 
 /**
  * Authenticated media proxy. Streams an object from the private `media`
@@ -9,17 +11,26 @@ import { createClient } from "@/lib/supabase/server";
  * inside Tiptap content too.
  */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
+  const log = createLogger({ request_id: requestIdFrom(req), route: "/api/media" });
   const { path } = await params;
   const objectPath = path.map(decodeURIComponent).join("/");
 
   const supabase = await createClient();
   const { data, error } = await supabase.storage.from("media").download(objectPath);
   if (error || !data) {
+    log.warn("media download failed", { object_path: objectPath, status: 404 });
     return new NextResponse("Not found", { status: 404 });
   }
+
+  log.info("media served", {
+    object_path: objectPath,
+    content_type: data.type,
+    bytes: data.size,
+    status: 200,
+  });
 
   const buf = await data.arrayBuffer();
   return new NextResponse(buf, {
