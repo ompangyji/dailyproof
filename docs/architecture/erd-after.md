@@ -78,6 +78,7 @@ erDiagram
   - 상태: `uploaded → processing → ready | failed` (failed → processing 재처리).
   - 메타데이터(content_type/size/width/height/checksum/thumb_path)는 worker 후처리로 채워진다.
   - `kind in ('doits','pages')`로 업로드 맥락을 표시하지만, `doits`/`pages`와 **FK로 직접 묶지 않는다**(자산은 스토리지 객체 기준으로 독립 추적, 느슨한 결합).
+  - **CHECK 제약(서버측 검증)**: `content_type`은 `image/%`, `size_bytes`는 8MB 이하. media 버킷의 `file_size_limit`/`allowed_mime_types`와 짝이 되는 record-level 게이트.
 - **jobs** — 자산당 후처리 작업 큐(외부 브로커 없이 DB 큐 + polling).
   - `attempts`/`max_attempts`(재시도), `run_after`(백오프), `locked_at`/`locked_by`(선점).
   - `proof_assets`와 `asset_id` FK로 1:N. `user_id`는 RLS·필터용 비정규화.

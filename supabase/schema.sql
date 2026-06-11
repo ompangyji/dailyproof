@@ -151,9 +151,15 @@ create policy "pages owner-only" on public.pages
 -- 경로 규칙: <auth.uid()>/<kind>/<filename>
 -- 읽기는 /api/media 프록시 라우트가 사용자 세션으로 download 하므로 RLS가 게이트.
 -- =========================================================================
-insert into storage.buckets (id, name, public)
-values ('media', 'media', false)
-on conflict (id) do update set public = false;
+-- 서버측 강제: 비공개 + 8MB 상한 + image/* 만 허용.
+-- 클라이언트 JS 검증(upload.ts)을 우회해 직접 업로드해도 Storage API가 거부한다
+-- (용량·MIME의 신뢰 가능한 게이트).
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('media', 'media', false, 8388608, array['image/*'])
+on conflict (id) do update set
+  public             = false,
+  file_size_limit    = 8388608,            -- 8 * 1024 * 1024
+  allowed_mime_types = array['image/*'];
 
 drop policy if exists "media: insert own" on storage.objects;
 create policy "media: insert own" on storage.objects
@@ -354,6 +360,15 @@ create index if not exists proof_assets_user_status_idx
 -- 중복 탐지용 체크섬 조회 (사용자 범위 내 동일 파일 찾기)
 create index if not exists proof_assets_checksum_idx
   on public.proof_assets (user_id, checksum);
+
+-- 기록된 자산 메타데이터 불변식(DB 강제): content_type은 image 계열, size는 8MB 이하.
+-- storage 버킷 제한과 짝이 되는 record-level 검증(멱등하게 재정의).
+alter table public.proof_assets drop constraint if exists proof_assets_content_type_chk;
+alter table public.proof_assets add constraint proof_assets_content_type_chk
+  check (content_type is null or content_type like 'image/%');
+alter table public.proof_assets drop constraint if exists proof_assets_size_chk;
+alter table public.proof_assets add constraint proof_assets_size_chk
+  check (size_bytes is null or size_bytes <= 8388608);
 
 -- 비동기 작업 큐 (asset 1건당 후처리 작업).
 create table if not exists public.jobs (
