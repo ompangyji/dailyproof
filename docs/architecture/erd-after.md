@@ -81,6 +81,7 @@ erDiagram
 - **jobs** — 자산당 후처리 작업 큐(외부 브로커 없이 DB 큐 + polling).
   - `attempts`/`max_attempts`(재시도), `run_after`(백오프), `locked_at`/`locked_by`(선점).
   - `proof_assets`와 `asset_id` FK로 1:N. `user_id`는 RLS·필터용 비정규화.
+  - **자동 enqueue**: `proof_assets` insert 시 트리거 `enqueue_proof_job`이 `process_image` job 1건을 생성한다(asset:job = 1:1, 클라이언트는 asset만 넣고 job 생성은 DB가 책임).
 
 ## 무엇이 달라졌나
 

@@ -443,3 +443,24 @@ $$;
 -- anon/authenticated 사용자가 큐를 선점/조작하지 못하게 한다.
 revoke all on function public.claim_job(text) from public;
 grant execute on function public.claim_job(text) to service_role;
+
+-- 자산이 생성되면 후처리 job 1건을 자동 enqueue (asset:job = 1:1 보장, 원자적).
+--   클라이언트는 proof_assets만 insert하고, job 생성은 DB가 책임진다.
+--   SECURITY DEFINER로 jobs RLS를 우회해 항상 enqueue된다.
+create or replace function public.enqueue_proof_job()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.jobs (asset_id, user_id, type)
+  values (new.id, new.user_id, 'process_image');
+  return new;
+end;
+$$;
+
+drop trigger if exists proof_assets_enqueue on public.proof_assets;
+create trigger proof_assets_enqueue
+  after insert on public.proof_assets
+  for each row execute function public.enqueue_proof_job();

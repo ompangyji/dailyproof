@@ -10,6 +10,12 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 ### 1. docs 디렉토리 구조 생성 + source of truth 확정
 
+**이전 상태 / 문제**
+
+- 작업을 막 시작한 시점이라 산출물(코드·문서·증거)을 **어디에 어떤 규칙으로 쌓을지 기준이 없었다.**
+- 기준 없이 진행하면 문서·스샷이 흩어지고, 원본이 repo인지 Notion인지 모호해져 나중에 source of truth가 충돌한다.
+- → 무엇을 만들기 전에 산출물의 집(디렉토리)·원본 위치·명명 규칙부터 고정한다.
+
 **한 일**
 
 - `docs/` 하위에 `plan/`, `architecture/`, `runbooks/`, `incidents/`, `performance/`, `screenshots/` 골격 생성. 빈 폴더는 `.gitkeep`으로 추적.
@@ -28,6 +34,12 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `001-docs-directory-structure-20260609.png` — 생성된 `docs/` 디렉토리 트리
 
 ### 2. 현재 프로젝트 구조 분석
+
+**이전 상태 / 문제**
+
+- 목표(DevOps 확장)는 있는데, 정작 **현재 코드베이스가 무엇을 이미 갖췄고 무엇이 없는지** 정리된 게 없었다.
+- 현재를 모르면 "무엇을 새로 만들고 무엇을 재사용할지" 판단이 안 돼, 멀쩡한 걸 다시 만들거나 빠뜨릴 위험이 있다.
+- → 코드·데이터·경계를 읽어 "이미 있는 강점 vs 없는 운영 요소"를 먼저 정리한다.
 
 **한 일**
 
@@ -66,6 +78,12 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 ### 3. Gap 분석 (현재 vs 목표 DevOps 범위)
 
+**이전 상태 / 문제**
+
+- 현재 상태(2번)와 목표 범위가 각각 따로 정리됐을 뿐, **둘을 항목별로 맞대어 본 적이 없었다.**
+- 비교가 없으면 무엇이 얼마나 비었는지(우선순위)와 2주 안에 무엇부터 손댈지가 안 보인다.
+- → 항목별 현재 vs 목표를 🟢/🟡/🔴 + 우선순위로 한 표에 비교한다.
+
 **한 일**
 
 - `docs/plan/gap-analysis.md` 작성: 현재 상태와 목표 DevOps 범위(실행계획 18개 항목 + 기반 인프라)를 항목별로 비교.
@@ -80,6 +98,12 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 ### 4. 직접 구현 vs 문서/설계 대체 구분
 
+**이전 상태 / 문제**
+
+- gap 목록은 나왔지만 "이걸 **다 직접 구축할 수 있나**"에 대한 기준이 없었다(로컬 단일 머신·2주·무료 계정 제약이 큼).
+- 기준 없이 다 직접 하려다 시간 부족으로 어중간해지거나, 반대로 다 문서로 때워 실증이 빈약해질 위험이 있다.
+- → "환경 제약일 때만 문서 대체"라는 기준으로 직접/혼합/문서를 분류하고 인프라 도구(k3s 등)를 확정한다.
+
 **한 일**
 
 - `gap-analysis.md`에 6절(직접 구현 vs 문서/설계 대체) 추가: 판정 기준(환경 제약일 때만 문서 대체) + 항목별 분류 표 + 인프라 도구 결정 근거.
@@ -92,6 +116,12 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - **Terraform 혼합**: AWS 제외로 클라우드 apply 대상이 없어, 로컬·무료 대상(docker provider/k3s)에 한해 실제 apply하고 AWS 인프라는 [추후] 문서 매핑.
 
 ### 5. 전체 아키텍처 초안 + 핵심 시나리오 확정
+
+**이전 상태 / 문제**
+
+- 추가할 운영 요소(컨테이너·관측성·배포·비동기)가 목록으로는 있지만, **서로 어떻게 연결되는지·무엇을 만들지 한 흐름이 없었다.**
+- 흐름이 없으면 항목들이 따로 놀아 산만해지고, "왜 하필 이미지 후처리인가" 같은 시나리오 정당성도 흐려진다.
+- → 업로드→asset/job→worker→상태전이→관측을 하나의 핵심 시나리오로 묶고, 모든 운영 항목을 여기에 건다.
 
 **한 일**
 
@@ -120,6 +150,12 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 ### 6. 환경 분리 전략 초안
 
+**이전 상태 / 문제**
+
+- 현재는 env가 **2개(공개 키)뿐이고 dev/staging/prod 구분이 없었다.**
+- 환경 구분이 없으면 안전한 배포 승격·서버 전용 시크릿 주입·롤백 같은 운영 이야기를 할 수 없다.
+- → dev/staging/prod 정의와 분리 수단(네임스페이스·GitHub Environment·환경별 주입값)을 먼저 설계한다.
+
 **한 일**
 
 - `docs/architecture/environments.md` 작성: dev/staging/prod 정의, 분리 수단(app config·K8s namespace·GitHub Environment·도메인), 환경별 차이 매트릭스, 환경 변수 정리, 시크릿 주입 지점, Supabase 분리 제약, 예상 매니페스트 구조.
@@ -132,6 +168,12 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - Supabase는 이상적으로 환경별 별도 프로젝트, 계정 제약 시 단일 프로젝트+키/스키마 분리로 차선. 실제 선택은 컨테이너화·k3s 배포 구축 단계에서 확정해 기록.
 
 ### 7. proof_assets / jobs DB 스키마 초안
+
+**이전 상태 / 문제**
+
+- 비동기 후처리를 하려면 자산의 **처리 상태와 작업 큐**가 필요한데, 그런 데이터 모델이 전혀 없었다.
+- 모델 없이 코드부터 짜면 상태 전이·동시성·재시도 설계가 흔들리고 나중에 갈아엎게 된다.
+- → `proof_assets`(상태) + `jobs`(큐) 스키마를 먼저 초안으로 설계한다(이 단계는 적용 전).
 
 **한 일**
 
@@ -152,6 +194,12 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 ### 8. Notion sync 구조 설계 + workflow 초안
 
+**이전 상태 / 문제**
+
+- 문서는 repo에 쌓이는데, 공유/열람은 **Notion으로 수동으로 옮겨야** 했다.
+- 수동이면 repo와 Notion이 어긋나고, 원본이 둘로 갈려 관리 비용이 든다.
+- → repo→Notion 단방향 자동 동기화 구조를 먼저 설계한다(원본은 repo로 고정).
+
 **한 일**
 
 - `docs/plan/notion-sync.md` 작성: docs→Notion 단방향 동기화 설계(원칙·흐름·페이지 매핑·마크다운 변환·시크릿·미결 사항).
@@ -171,6 +219,11 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 ### 9. Notion sync 파이프라인 구현 (push→Notion 자동 생성)
 
+**이전 상태 / 문제**
+
+- 설계(8번)는 있지만 실제로 도는 **변환기·동기화 로직이 없어 여전히 수동**이었다.
+- → 마크다운→Notion 변환기 + 워크플로를 구현해 push 시 자동 생성/갱신되게 한다.
+
 **한 일**
 
 - `scripts/notion-sync.mjs` 구현: 마크다운→Notion 블록 변환기 + upsert 동기화. 헤딩·문단·굵게/코드/링크·목록·체크박스·인용·표·코드블록(mermaid 보존)·구분선 지원.
@@ -189,6 +242,11 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - 다음: GitHub Secrets(`NOTION_TOKEN`, `NOTION_PARENT_PAGE_ID`) 등록 시 push 자동 동기화 활성화.
 
 ### 10. GitHub Secrets 등록 · 자동 동기화 활성화
+
+**이전 상태 / 문제**
+
+- 구현(9번)은 됐지만 `NOTION_TOKEN`이 없어 워크플로가 **매번 skip돼, 자동 동기화가 실제로는 안 돌았다.**
+- → 시크릿을 등록해 토큰 가드를 풀고 push 자동 동기화를 활성화한다.
 
 **한 일**
 
@@ -210,6 +268,12 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 ## 2026-06-10
 
 ### 1. 브랜치 전략 정의
+
+**이전 상태 / 문제**
+
+- 지금까지는 별 규칙 없이 **main에 직접 커밋**해 왔다. 코드 작업을 본격 시작하려는데 브랜치·리뷰·배포 게이트 규칙이 없었다.
+- 규칙 없이 코드 작업을 시작하면 변경이 main에 뒤섞이고, 뒤에 붙일 CI/CD·GitOps가 올라탈 기준점이 없다.
+- → 코드 첫 줄을 짜기 전에 브랜치 모델(GitHub Flow + 환경 승격)을 먼저 고정한다.
 
 **한 일**
 
@@ -251,6 +315,12 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 ### 2. proof_assets / jobs 스키마 통합 (schema.sql 반영)
 
+**이전 상태 / 문제**
+
+- proof_assets/jobs는 06-09에 만든 `proof_assets.draft.sql` **초안으로만** 있었고, 정식 `schema.sql` 밖에 떨어져 있었으며 Supabase에 **적용도 안 된** 상태였다.
+- 초안이 본 스키마와 분리돼 있으면 단일 소스가 깨지고, 실제 DB에 객체가 없으니 코드가 기댈 수 없다.
+- → 초안을 `schema.sql`에 통합(단일 소스)하고 Supabase에 실제 적용한다.
+
 **한 일**
 
 - 06-09에 만든 초안 `supabase/proof_assets.draft.sql`을 정식 `supabase/schema.sql` 끝에 **통합**하고 draft 파일은 제거(단일 소스 유지).
@@ -282,3 +352,75 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `docs/architecture/erd-before.md` — 통합 전 ERD (기존 6테이블)
 - `docs/architecture/erd-after.md` — 추가 후 ERD (+proof_assets, jobs)
+
+---
+
+## 2026-06-11
+
+### 1. 첫 feature → PR → merge 사이클 수행
+
+**이전 상태 / 문제**
+
+- `branching.md`에 PR 흐름을 규칙으로 적어뒀지만 **실제로 한 번도 돌려본 적이 없었다.** 게다가 커밋 author가 전역 설정값 `Backend API Agent`로 찍히고 있었다.
+- 흐름을 안 돌려보면 규칙이 실제로 동작하는지 모르고, author가 본인이 아니면 Vercel 빌드가 거부되고 GitHub 기여에도 안 잡힌다.
+- → 첫 PR을 실제로 끝까지 돌려 흐름을 검증하고, author를 본인으로 교정한다.
+
+**한 일**
+
+- `branching.md` 전략대로 **첫 PR 흐름을 실제로 한 바퀴 수행**: `feature/async-pipeline` push → PR #1 생성(제목·설명 작성) → CI(Vercel) 통과 → **squash merge** → `main` 동기화(`pull --ff-only`) → 작업 브랜치 정리(로컬·원격 삭제).
+- 커밋 author를 본인(`ompangyji <ompangyji@gmail.com>`)으로 교정. 전역 git 설정이 `Backend API Agent`라 그대로 커밋돼 있었고, 이 때문에 Vercel이 프리뷰 빌드를 거부했다.
+- 이미 push돼 있던 브랜치라 author 교정분을 force-push로 반영.
+
+**왜 / 배운 점**
+
+- **Vercel은 커밋 author 이메일이 GitHub 계정과 매칭돼야** 프리뷰를 빌드한다(매칭 안 되면 "No GitHub account ... matching the commit author" 로 실패). author가 본인이어야 GitHub contribution graph에도 기여로 잡힌다.
+- 단, 이 체크 실패가 **merge 자체를 막지는 않는다**(branch protection으로 필수 체크를 걸지 않은 상태).
+- `/mnt/d`(WSL drvfs)에서 `git config` 쓰기가 chmod 제약으로 막혀, `.git/config`의 `[user]` 섹션을 직접 편집해 author를 설정.
+- 이미 원격에 올라간 커밋의 이력을 고치면 force-push가 필요하다(단독 repo라 안전).
+
+**자료**
+
+- `004~006-git-pr-*` — PR 생성·검토·merge 화면 (GitHub)
+- `007-git-local-sync-20260611.png` — merge 후 로컬 `main` 동기화 + feature 브랜치 삭제 (터미널)
+
+### 2. 업로드 → asset/job 생성 흐름 구현
+
+**이전 상태 / 문제**
+
+- 기존 업로드는 storage에 파일을 올리고 그 URL을 `doit.image_urls`(text 배열)에 저장하는 **동기 흐름**이 전부였다. 업로드된 파일의 **처리 상태도, 후처리 작업 큐도 없었다.**
+- 그래서 안 좋았던 점:
+  - **추적 불가**: 업로드 이후 무엇이 일어났는지(처리 중/완료/실패) 알 수 있는 상태 모델이 없어, 실패·지연·적체를 관측할 지점이 없었다.
+  - **확장 불가**: 썸네일·메타데이터·해시·중복탐지 같은 후처리를 끼워 넣을 자리가 없었다.
+  - **운영 소재 부재**: 큐·워커·적체·재처리 같은 비동기 운영(DevOps에서 보여줄 핵심)이 성립할 토대 자체가 없었다.
+- → 업로드를 "**추적·후처리 가능한 비동기 파이프라인의 진입점**"으로 바꾸기 위해 asset 상태 모델 + job 큐 + 자동 enqueue를 연결한다.
+
+**한 일**
+
+- 업로드 직후 `proof_assets` 레코드가 생기고, 그에 대한 후처리 `jobs`가 자동 enqueue되도록 흐름을 연결. (`feature/upload-asset-job-flow`)
+- `src/lib/supabase/upload.ts`: storage 업로드 성공 후 `proof_assets` 1행 insert(`source_path`/`kind`/`status='uploaded'`/`content_type`/`size_bytes`). insert 실패 시 방금 올린 storage 객체를 삭제해 orphan을 막는다.
+- `supabase/schema.sql`: 트리거 함수 `enqueue_proof_job` + `proof_assets_enqueue`(after insert) 추가 — 자산이 생기면 `process_image` job 1건을 자동 생성.
+- `src/lib/supabase/types.ts`: `ProofAsset`/`Job` 타입 추가.
+
+**핵심 설계**
+
+- **job 생성 책임을 DB로**: 클라이언트는 `proof_assets`만 insert하고, job 생성은 트리거가 한다. asset:job = 1:1을 DB가 원자적으로 보장(클라이언트가 두 번 insert하다 한쪽만 성공하는 경우 없음). 트리거는 SECURITY DEFINER라 jobs RLS와 무관하게 항상 enqueue.
+- **업로드 원자성**: storage 객체와 asset 레코드가 항상 함께 존재하거나 함께 없도록(asset insert 실패 시 storage 롤백).
+- width/height/checksum/thumb는 클라이언트가 모르므로 비워두고 worker 후처리에서 채운다.
+
+**검증 (실제 동작 확인)**
+
+- `schema.sql` 재실행 후 앱에서 이미지 1장 업로드 → DB 확인 결과 의도대로 동작:
+  - `proof_assets` 1행: `kind=doits`, `status=uploaded`, `content_type=image/png`, `size_bytes=286942`.
+  - `jobs` 1행: `type=process_image`, `status=pending`, `attempts=0`.
+  - **`jobs.asset_id` = `proof_assets.id`** 로 일치 → 트리거가 해당 자산의 job을 정확히 연결함.
+
+**자료**
+
+- `008-1-app-upload-doit.png` / `008-2-app-upload-doit.png` — 업로드(다이얼로그 첨부 / 저장된 doit)
+- `009-db-proof-assets-row.png` — proof_assets 새 행(status=uploaded)
+- `010-db-jobs-row.png` — jobs 새 행(status=pending, asset_id 일치)
+
+**비고**
+
+- 트리거가 추가됐으므로 적용 시 **Supabase SQL Editor에서 `schema.sql` 재실행** 필요(멱등).
+- 아직 worker가 없어 job은 `pending`으로 쌓인다(소비자는 후속 task). 타입체크(`tsc --noEmit`) 통과.
