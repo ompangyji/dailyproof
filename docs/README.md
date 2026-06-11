@@ -49,6 +49,7 @@
 | `obs-` | Grafana/Prometheus/Loki 대시보드 |
 | `trace-` | OpenTelemetry trace 화면 |
 | `deploy-` | ArgoCD sync / GitHub Actions / 롤백 |
+| `git-` | git/PR/merge 워크플로 (브랜치·PR 화면, 로컬 동기화) |
 | `incident-` | 장애 재현·탐지 화면 |
 | `perf-` | k6/autocannon 성능 결과 |
 | `admin-` | admin ops 페이지 |

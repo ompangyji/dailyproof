@@ -282,3 +282,27 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `docs/architecture/erd-before.md` — 통합 전 ERD (기존 6테이블)
 - `docs/architecture/erd-after.md` — 추가 후 ERD (+proof_assets, jobs)
+
+---
+
+## 2026-06-11
+
+### 1. 첫 feature → PR → merge 사이클 수행
+
+**한 일**
+
+- `branching.md` 전략대로 **첫 PR 흐름을 실제로 한 바퀴 수행**: `feature/async-pipeline` push → PR #1 생성(제목·설명 작성) → CI(Vercel) 통과 → **squash merge** → `main` 동기화(`pull --ff-only`) → 작업 브랜치 정리(로컬·원격 삭제).
+- 커밋 author를 본인(`ompangyji <ompangyji@gmail.com>`)으로 교정. 전역 git 설정이 `Backend API Agent`라 그대로 커밋돼 있었고, 이 때문에 Vercel이 프리뷰 빌드를 거부했다.
+- 이미 push돼 있던 브랜치라 author 교정분을 force-push로 반영.
+
+**왜 / 배운 점**
+
+- **Vercel은 커밋 author 이메일이 GitHub 계정과 매칭돼야** 프리뷰를 빌드한다(매칭 안 되면 "No GitHub account ... matching the commit author" 로 실패). author가 본인이어야 GitHub contribution graph에도 기여로 잡힌다.
+- 단, 이 체크 실패가 **merge 자체를 막지는 않는다**(branch protection으로 필수 체크를 걸지 않은 상태).
+- `/mnt/d`(WSL drvfs)에서 `git config` 쓰기가 chmod 제약으로 막혀, `.git/config`의 `[user]` 섹션을 직접 편집해 author를 설정.
+- 이미 원격에 올라간 커밋의 이력을 고치면 force-push가 필요하다(단독 repo라 안전).
+
+**자료**
+
+- `004~006-git-pr-*` — PR 생성·검토·merge 화면 (GitHub)
+- `007-git-local-sync-20260611.png` — merge 후 로컬 `main` 동기화 + feature 브랜치 삭제 (터미널)
