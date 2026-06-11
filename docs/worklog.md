@@ -419,8 +419,47 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `008-1-app-upload-doit.png` / `008-2-app-upload-doit.png` — 업로드(다이얼로그 첨부 / 저장된 doit)
 - `009-db-proof-assets-row.png` — proof_assets 새 행(status=uploaded)
 - `010-db-jobs-row.png` — jobs 새 행(status=pending, asset_id 일치)
+- `011-git-pr2-open` / `012-git-pr2-merged` / `013-git-local-sync` — 이 작업을 PR #2로 main 반영(생성→merge→로컬 동기화)
 
 **비고**
 
 - 트리거가 추가됐으므로 적용 시 **Supabase SQL Editor에서 `schema.sql` 재실행** 필요(멱등).
 - 아직 worker가 없어 job은 `pending`으로 쌓인다(소비자는 후속 task). 타입체크(`tsc --noEmit`) 통과.
+
+### 3. 서버측 업로드 검증 강화 (MIME·용량·content-type)
+
+**이전 상태 / 문제**
+
+- 업로드 검증이 `upload.ts`(브라우저)에만 있었다 — MIME `image/*` + 8MB 체크가 전부.
+- 클라이언트 검증은 **신뢰할 수 없다**: 브라우저 우회/직접 Storage API 호출로 임의 타입·대용량 파일을 그대로 올릴 수 있었고, 막아주는 **서버측 게이트가 없었다.**
+- → 우회 불가능한 지점(Storage 버킷·DB)에서 용량·MIME을 강제한다.
+
+**한 일**
+
+- `supabase/schema.sql`:
+  - media 버킷에 `file_size_limit=8388608`(8MB) + `allowed_mime_types=['image/*']` 설정 → 클라이언트를 우회해도 **Storage API가 업로드를 거부**한다.
+  - `proof_assets`에 CHECK 제약 2개(`content_type like 'image/%'`, `size_bytes <= 8MB`) 추가 — 기록되는 메타데이터 불변식(멱등 재정의).
+- `src/lib/supabase/upload.ts`: 클라이언트 검사가 서버 한도를 미러링하는 **빠른 UX용**임을 주석으로 명시(진짜 게이트는 Storage/DB).
+
+**핵심 설계 — 다층 검증(defense in depth)**
+
+- 1차 클라이언트(`upload.ts`): 즉각 피드백. 신뢰하지 않음.
+- 2차 Storage 버킷: 용량·선언 MIME을 서버가 강제, 업로드 자체를 거부. ← **핵심 게이트**
+- 3차 DB CHECK: 기록되는 asset 메타데이터 불변식.
+- 4차 worker(후속): 실제 바이트(매직넘버)로 **선언 content-type 위조**까지 검증 → 불일치면 `status=failed`. (지금은 자리만 명시, 미구현)
+
+**비고 / 검증 방법**
+
+- 적용: Supabase SQL Editor에서 `schema.sql` 재실행(멱등). 버킷 설정은 Storage > 버킷 설정에서도 확인 가능.
+- 테스트: **8MB 초과 파일** 또는 **비이미지 파일** 업로드 시도 → Storage가 거부(에러)하는지 확인.
+- 타입체크(`tsc --noEmit`) 통과.
+
+**자료** — 검증이 여러 층에서 강제됨을 "설정 + 동작"으로 증명
+
+- `014-sec-bucket-limits-20260611.png` — Supabase Storage `media` 버킷에 `8 MB` / `image/*`가 적용된 화면. **Storage-층 게이트가 설정됨**.
+- `015-sec-check-reject-20260611.png` — SQL Editor에서 `content_type='application/pdf'` 행을 직접 insert 시도 → `proof_assets_content_type_chk` 위반으로 거부. **DB-층 게이트가 동작함**.
+- UI 다층 방어 — **같은 PDF**가 경로에 따라 다른 층에서 차단되는 것을 보임:
+  - `016-sec-bypass-code-20260611.png` — 데모를 위해 `upload.ts`의 클라이언트 검증을 임시 주석 처리한 코드(= 클라 게이트를 일부러 우회한 상태임을 명시. 커밋엔 미포함).
+  - `017-sec-ui-server-reject-20260611.png` — 우회 상태에서 PDF 업로드 → UI에 `mime type application/pdf is not supported`. **클라를 뚫어도 Storage(서버)가 막는다**.
+  - `018-sec-ui-client-reject-20260611.png` — 원복(정상) 후 같은 PDF → UI에 `Only image files are supported.`. **정상 경로에선 클라이언트가 1차로 막는다**.
+- 종합: 014/015는 설정·DB 게이트, 017/018은 같은 입력(PDF)을 **클라+서버 두 겹이 각각 차단**(016이 그 우회 조건을 설명). 다층 방어(defense in depth)가 설정·동작 모두 증명됨.

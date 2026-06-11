@@ -4,7 +4,9 @@ import { createClient } from "./client";
 
 export type UploadKind = "doits" | "pages";
 
-const MAX_BYTES = 8 * 1024 * 1024; // 8 MB / image — tweak if needed.
+// 서버측 한도(media 버킷 file_size_limit + proof_assets_size_chk)를 그대로 미러링.
+// 이 클라이언트 검사는 빠른 UX용이고, 진짜 게이트는 Storage/DB다(우회 불가).
+const MAX_BYTES = 8 * 1024 * 1024; // 8 MB / image
 
 /**
  * Upload one image to the `media` bucket under {userId}/{kind}/{uuid}.{ext}
