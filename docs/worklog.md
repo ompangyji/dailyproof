@@ -306,3 +306,45 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `004~006-git-pr-*` — PR 생성·검토·merge 화면 (GitHub)
 - `007-git-local-sync-20260611.png` — merge 후 로컬 `main` 동기화 + feature 브랜치 삭제 (터미널)
+
+### 2. 업로드 → asset/job 생성 흐름 구현
+
+**이전 상태 / 문제**
+
+- 기존 업로드는 storage에 파일을 올리고 그 URL을 `doit.image_urls`(text 배열)에 저장하는 **동기 흐름**이 전부였다. 업로드된 파일의 **처리 상태도, 후처리 작업 큐도 없었다.**
+- 그래서 안 좋았던 점:
+  - **추적 불가**: 업로드 이후 무엇이 일어났는지(처리 중/완료/실패) 알 수 있는 상태 모델이 없어, 실패·지연·적체를 관측할 지점이 없었다.
+  - **확장 불가**: 썸네일·메타데이터·해시·중복탐지 같은 후처리를 끼워 넣을 자리가 없었다.
+  - **운영 소재 부재**: 큐·워커·적체·재처리 같은 비동기 운영(DevOps에서 보여줄 핵심)이 성립할 토대 자체가 없었다.
+- → 업로드를 "**추적·후처리 가능한 비동기 파이프라인의 진입점**"으로 바꾸기 위해 asset 상태 모델 + job 큐 + 자동 enqueue를 연결한다.
+
+**한 일**
+
+- 업로드 직후 `proof_assets` 레코드가 생기고, 그에 대한 후처리 `jobs`가 자동 enqueue되도록 흐름을 연결. (`feature/upload-asset-job-flow`)
+- `src/lib/supabase/upload.ts`: storage 업로드 성공 후 `proof_assets` 1행 insert(`source_path`/`kind`/`status='uploaded'`/`content_type`/`size_bytes`). insert 실패 시 방금 올린 storage 객체를 삭제해 orphan을 막는다.
+- `supabase/schema.sql`: 트리거 함수 `enqueue_proof_job` + `proof_assets_enqueue`(after insert) 추가 — 자산이 생기면 `process_image` job 1건을 자동 생성.
+- `src/lib/supabase/types.ts`: `ProofAsset`/`Job` 타입 추가.
+
+**핵심 설계**
+
+- **job 생성 책임을 DB로**: 클라이언트는 `proof_assets`만 insert하고, job 생성은 트리거가 한다. asset:job = 1:1을 DB가 원자적으로 보장(클라이언트가 두 번 insert하다 한쪽만 성공하는 경우 없음). 트리거는 SECURITY DEFINER라 jobs RLS와 무관하게 항상 enqueue.
+- **업로드 원자성**: storage 객체와 asset 레코드가 항상 함께 존재하거나 함께 없도록(asset insert 실패 시 storage 롤백).
+- width/height/checksum/thumb는 클라이언트가 모르므로 비워두고 worker 후처리에서 채운다.
+
+**검증 (실제 동작 확인)**
+
+- `schema.sql` 재실행 후 앱에서 이미지 1장 업로드 → DB 확인 결과 의도대로 동작:
+  - `proof_assets` 1행: `kind=doits`, `status=uploaded`, `content_type=image/png`, `size_bytes=286942`.
+  - `jobs` 1행: `type=process_image`, `status=pending`, `attempts=0`.
+  - **`jobs.asset_id` = `proof_assets.id`** 로 일치 → 트리거가 해당 자산의 job을 정확히 연결함.
+
+**자료**
+
+- `008-1-app-upload-doit.png` / `008-2-app-upload-doit.png` — 업로드(다이얼로그 첨부 / 저장된 doit)
+- `009-db-proof-assets-row.png` — proof_assets 새 행(status=uploaded)
+- `010-db-jobs-row.png` — jobs 새 행(status=pending, asset_id 일치)
+
+**비고**
+
+- 트리거가 추가됐으므로 적용 시 **Supabase SQL Editor에서 `schema.sql` 재실행** 필요(멱등).
+- 아직 worker가 없어 job은 `pending`으로 쌓인다(소비자는 후속 task). 타입체크(`tsc --noEmit`) 통과.

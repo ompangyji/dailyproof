@@ -81,7 +81,9 @@ sequenceDiagram
 
     U->>W: 이미지 업로드 (request_id 발급)
     W->>S: 원본 저장 (media/<uid>/...)
-    W->>DB: proof_assets(status=uploaded) + jobs(pending) insert
+    W->>DB: proof_assets(status=uploaded) insert
+    DB->>DB: 트리거 enqueue_proof_job → jobs(pending) insert
+    Note over DB: asset+job 같은 트랜잭션 (원자적 1:1)
     W-->>U: 202 수락 (asset_id 반환)
 
     loop polling

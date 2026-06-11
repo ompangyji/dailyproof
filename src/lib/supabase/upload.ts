@@ -35,6 +35,23 @@ export async function uploadImage(file: File, kind: UploadKind): Promise<string>
     });
   if (upErr) throw new Error(upErr.message);
 
+  // Register the asset for async post-processing. A DB trigger
+  // (proof_assets_enqueue) enqueues a `jobs` row for the worker.
+  // Metadata we know up front; width/height/checksum/thumb are filled later.
+  const { error: assetErr } = await supabase.from("proof_assets").insert({
+    user_id: user.id,
+    source_path: path,
+    kind,
+    status: "uploaded",
+    content_type: file.type,
+    size_bytes: file.size,
+  });
+  if (assetErr) {
+    // Don't leave an orphaned storage object if we couldn't record the asset.
+    await supabase.storage.from("media").remove([path]).catch(() => {});
+    throw new Error(`Failed to register upload: ${assetErr.message}`);
+  }
+
   // Bucket is private; reference the file through the authenticated proxy.
   return `/api/media/${path}`;
 }
