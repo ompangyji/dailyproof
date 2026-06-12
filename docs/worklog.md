@@ -563,9 +563,48 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `028-db-job-done-20260612.png` — jobs 테이블: job `ff16de20…`가 `status=done`, `attempts=1`, `asset_id=6bb283d1…`.
 - `029-db-asset-ready-20260612.png` — proof_assets 테이블: asset `6bb283d1…`가 `status=ready`(`image/png`, `2869424` bytes; `width`/`height`는 `NULL`).
 - → 028의 `asset_id`와 029의 `id`가 같은 `6bb283d1…` = worker가 그 job으로 그 asset을 ready로 전이시킨 것이 한눈에 증명됨.
+- `030-git-pr5-open` / `031-git-pr5-merged` / `032-git-local-sync` — 이 작업을 PR #5로 main 반영(생성→merge→로컬 동기화).
 
 **비고**
 
 - worker는 `.mjs` + node 직접 실행(`notion-sync`와 동일 패턴, TS 툴링·네이티브 의존 회피). 공통 로거 통합은 추후 web/worker 공통 로그 포맷 통일 시 예정.
 - 시크릿: 기존 `.env.local`(앱과 공용, git 미추적)에 `SUPABASE_SERVICE_ROLE_KEY` 한 줄만 추가(URL은 `NEXT_PUBLIC_SUPABASE_URL` 재사용). **절대 커밋 금지.**
 - 빈 큐 주의: `claim_job(RETURNS public.jobs)`은 빈 큐에서 NULL을 반환하고 PostgREST가 이를 "전 컬럼 null인 한 행"으로 표현 → worker는 `job.id`로 실제 선점 여부를 판별(가드 추가).
+
+### 2. job 처리 + 상태 전이 (성공 경로)
+
+**이전 상태 / 문제**
+
+- worker가 골격이라 `processJob`이 **실제 후처리 없이 상태만 `ready`로 바꾸는 stub**이었다. 자산 메타데이터(checksum/size/차원)는 비어 있고(`width`/`height`=NULL) "처리됨" 표시만 됐다.
+- → worker가 원본을 실제로 받아 메타데이터를 산출하고 정식 상태 전이(uploaded→processing→ready)를 하게 만든다.
+
+**목적**
+
+- "배송 기사"가 **실제로 짐을 푸는** 단계. 지금까진 큐에서 job을 꺼내 표시만 했다면, 이제 원본 이미지를 읽어 체크섬·크기·차원을 뽑아 자산에 채운다. 후처리 결과가 DB에 쌓여야 중복 탐지·관측·admin 같은 다음 운영 이야기가 가능해진다.
+
+**한 일**
+
+- `worker/worker.mjs`의 `processJob`을 실제 처리로 교체: 자산을 `processing`으로 표시 → `source_path`로 원본 download → **sha256 checksum·실제 size·차원** 산출 → `proof_assets`(status `ready` + content_type·size_bytes·width·height·checksum) 채우고 job `done`.
+- `imageDimensions(buf)`: **의존성 없이** PNG(IHDR)·JPEG(SOF 마커)의 차원만 가볍게 파싱(그 외 포맷은 차원 null). 네이티브 이미지 라이브러리(sharp 등)·WSL chmod 이슈 회피.
+- 완료 로그에 size_bytes·width·height·checksum(앞 12자)을 포함해 결과가 로그로도 보이게.
+
+**핵심 설계**
+
+- **가볍게**(시나리오 원칙): 후처리는 checksum·size·차원까지. 썸네일 생성·적극적 중복 차단은 후속.
+- 상태 전이를 단계적으로 노출: `uploaded → processing → ready`. (처리 실패 시 throw → 지금은 로그만, `failed` 전이·재시도/백오프는 후속.)
+
+**검증 (실제 동작 확인)**
+
+- 새 이미지를 업로드해 새 pending job을 만든 뒤 `npm run worker` 실행 → worker가 선점·처리.
+- 실제 결과: 새 자산 `d9e47f53…`가 처리되어 `proof_assets`에 **`width=1536`, `height=1024`, `checksum=a23b734ba…`, `size_bytes=2869424`, content_type `image/png`** 가 채워지고 status `ready`.
+- **stub와 대비**: 같은 표에서 이전 stub로 처리됐던 자산 `6bb283d1…`은 `width`/`height`/`checksum`이 여전히 `NULL`. → 실제 처리가 메타데이터를 진짜로 산출·저장함이 한 화면의 before/after로 증명된다.
+
+**자료**
+
+- `033-obs-worker-process-20260612.png` — worker 터미널: `job 선점` → `job 완료` 로그. 완료 줄에 산출값(width/height/checksum 등)이 포함됨 = worker가 원본을 읽어 실제로 계산했다는 증거.
+- `034-db-asset-metadata-20260612.png` — proof_assets 테이블 2행 대비: 신규 `d9e47f53…`는 `width=1536`/`height=1024`/`checksum` 채워짐(real 처리), 이전 `6bb283d1…`는 `NULL`(stub). 같은 표에서 "처리 전(stub) vs 처리 후(real)"가 드러남.
+
+**비고**
+
+- 이전 stub로 ready된 자산은 메타데이터가 빈 채 남는다(소급 재처리는 별도). 검증은 새 업로드로 수행.
+- `node --check` 통과.
