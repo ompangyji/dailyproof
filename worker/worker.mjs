@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * DailyProof 후처리 worker (골격).
+ * DailyProof 후처리 worker.
  *
- * jobs 큐(Day2에서 만든)를 소비하는 독립 프로세스. service_role 키로 접속해 RLS를
+ * jobs 큐(앞서 만든)를 소비하는 독립 프로세스. service_role 키로 접속해 RLS를
  * 우회하고, claim_job(FOR UPDATE SKIP LOCKED)으로 한 번에 한 job을 안전하게 선점한다.
  * 여러 worker를 띄워도 같은 job을 잡지 않는다.
  *
@@ -11,19 +11,19 @@
  *   - SUPABASE_SERVICE_ROLE_KEY   (서버 전용 시크릿! 절대 커밋 금지)
  *   URL은 이미 있는 NEXT_PUBLIC_SUPABASE_URL 을 재사용한다(아래 fallback).
  *
- * 범위(현재 골격): 폴링 루프·선점·구조화 로그·graceful shutdown 까지.
- *   실제 후처리(원본 download·checksum·메타데이터)와 정식 상태 전이,
- *   실패 재시도/백오프/error_code는 후속 단계에서 채운다.
+ * 처리: 원본 download → sha256 checksum·size·차원(PNG/JPEG) 산출 → proof_assets 채우고
+ *   상태 전이 uploaded→processing→ready, job done. 썸네일·적극 중복차단은 후속.
+ *   실패 재시도/백오프/error_code도 후속.
  */
 import { createClient } from "@supabase/supabase-js";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { hostname } from "node:os";
 
 const URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const POLL_IDLE_MS = Number(process.env.WORKER_POLL_IDLE_MS ?? 2000);
 
-// --- 구조화 로거: src/lib/log.ts 와 같은 JSON 한 줄 포맷(Day5에서 공통 모듈로 통합 예정) ---
+// --- 구조화 로거: src/lib/log.ts 와 같은 JSON 한 줄 포맷(추후 web/worker 공통 모듈로 통합) ---
 const APP_ENV = process.env.APP_ENV ?? "dev";
 function emit(level, msg, fields) {
   const line = JSON.stringify({ ts: new Date().toISOString(), level, env: APP_ENV, msg, ...fields });
@@ -47,19 +47,61 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let running = true;
 
+/** 의존성 없이 PNG/JPEG 차원만 가볍게 파싱. 그 외 포맷은 null(차원 비움). */
+function imageDimensions(buf) {
+  // PNG: \x89PNG 시그니처 + IHDR (width@16, height@20, big-endian)
+  if (buf.length >= 24 && buf.readUInt32BE(0) === 0x89504e47) {
+    return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+  }
+  // JPEG: 0xFFD8 ... SOFn 마커에서 높이/너비
+  if (buf.length >= 4 && buf[0] === 0xff && buf[1] === 0xd8) {
+    let o = 2;
+    while (o + 9 < buf.length) {
+      if (buf[o] !== 0xff) { o++; continue; }
+      const m = buf[o + 1];
+      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
+        return { height: buf.readUInt16BE(o + 5), width: buf.readUInt16BE(o + 7) };
+      }
+      o += 2 + buf.readUInt16BE(o + 2);
+    }
+  }
+  return { width: null, height: null };
+}
+
 /**
- * 선점한 job 처리. (현재 골격: 실제 후처리 없이 상태만 전이.)
- * 후속 단계에서 원본 download·checksum·메타데이터 산출로 교체한다.
+ * 선점한 job 처리: 원본을 받아 메타데이터를 산출하고 상태를 전이한다.
+ * uploaded→processing(시작)→ready(완료). 실패 시 throw → 루프에서 로그(재시도는 후속).
  */
 async function processJob(job) {
   const jlog = logger({ job_id: job.id, asset_id: job.asset_id });
   jlog.info("job 선점", { attempts: job.attempts, type: job.type });
 
-  // TODO(후속): media에서 원본 download → checksum/size/차원 산출 → proof_assets 채우기
-  await supabase.from("proof_assets").update({ status: "ready" }).eq("id", job.asset_id);
+  // 처리 중 표시
+  await supabase.from("proof_assets").update({ status: "processing" }).eq("id", job.asset_id);
+
+  // 대상 자산 조회 → 원본 download
+  const { data: asset, error: aErr } = await supabase
+    .from("proof_assets").select("id, source_path").eq("id", job.asset_id).single();
+  if (aErr || !asset) throw new Error(`asset 조회 실패: ${aErr?.message ?? "not found"}`);
+
+  const { data: blob, error: dErr } = await supabase.storage.from("media").download(asset.source_path);
+  if (dErr || !blob) throw new Error(`원본 download 실패: ${dErr?.message ?? "no data"}`);
+
+  // 후처리(가볍게): sha256 체크섬·실제 크기·차원
+  const buf = Buffer.from(await blob.arrayBuffer());
+  const checksum = createHash("sha256").update(buf).digest("hex");
+  const { width, height } = imageDimensions(buf);
+
+  // 결과 반영 → ready
+  const patch = { status: "ready", size_bytes: buf.length, width, height, checksum };
+  if (blob.type) patch.content_type = blob.type;
+  await supabase.from("proof_assets").update(patch).eq("id", job.asset_id);
   await supabase.from("jobs").update({ status: "done" }).eq("id", job.id);
 
-  jlog.info("job 완료(stub)", { asset_status: "ready", job_status: "done" });
+  jlog.info("job 완료", {
+    status: "ready", size_bytes: buf.length, width, height,
+    checksum: checksum.slice(0, 12) + "…",
+  });
 }
 
 async function loop() {
