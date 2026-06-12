@@ -603,8 +603,58 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `033-obs-worker-process-20260612.png` — worker 터미널: `job 선점` → `job 완료` 로그. 완료 줄에 산출값(width/height/checksum 등)이 포함됨 = worker가 원본을 읽어 실제로 계산했다는 증거.
 - `034-db-asset-metadata-20260612.png` — proof_assets 테이블 2행 대비: 신규 `d9e47f53…`는 `width=1536`/`height=1024`/`checksum` 채워짐(real 처리), 이전 `6bb283d1…`는 `NULL`(stub). 같은 표에서 "처리 전(stub) vs 처리 후(real)"가 드러남.
+- `035-git-pr6-merged` / `036-git-local-sync` — 이 작업을 PR #6으로 main 반영(merge→로컬 동기화).
 
 **비고**
 
 - 이전 stub로 ready된 자산은 메타데이터가 빈 채 남는다(소급 재처리는 별도). 검증은 새 업로드로 수행.
 - `node --check` 통과.
+
+### 3. 실패 처리: 재시도·백오프·error_code
+
+**이전 상태 / 문제**
+
+- worker 처리가 실패하면 **로그만 찍고 끝**이었다. job은 `processing`인 채 영영 멈추고(stuck), 자산도 `processing`에 갇혀 — 누구도 다시 처리하지 않고 실패 원인도 안 남았다.
+- → 실패를 1급으로 다룬다: 일시 오류는 **재시도**, 영구 오류는 **failed로 확정 + 원인 기록**.
+
+**목적**
+
+- 운영에서 **장애를 "복구 가능한 상태"로 만드는** 일. 실패가 그냥 멈춤이 아니라, 재시도로 자동 회복하거나 failed로 분류돼 admin이 골라 재처리·조사할 수 있어야 한다. 시나리오의 "stuck/failed job 장애·재처리" 운영 소재가 여기서 성립한다.
+
+**한 일**
+
+- `handleFailure(job, e)` 추가: `attempts < max_attempts`면 **지수 백오프**(`RETRY_BASE_MS * 2^(attempts-1)`)로 `run_after`를 미뤄 job을 `pending`으로 되돌리고 잠금 해제 → run_after 후 재선점. 도달하면 job·asset 모두 `failed` 확정 + `error_code`/`error_message`/`last_error` 기록.
+- 오류 분류(`error_code`): `coded(code, msg)`로 throw에 코드 부착 — `asset_not_found`, `download_failed`, 그 외 `unknown`.
+- 루프 catch가 단순 로그 대신 `handleFailure` 호출. `.env.example`에 `WORKER_RETRY_BASE_MS`.
+
+**핵심 설계**
+
+- `attempts`는 `claim_job`이 선점 시 이미 +1 하므로 그 값으로 재시도 횟수를 센다(`max_attempts=3` → 최대 3회 시도 후 failed).
+- 재시도는 **job을 pending+run_after로 되돌리는** 방식 → 같은 `claim_job` 폴링이 백오프 시점 이후 자연히 다시 집어간다(별도 스케줄러 불필요).
+- 멈춘(stuck: `locked_at`이 오래됨) job 회수는 후속.
+
+**검증 (실제 동작 확인)**
+
+- 존재하지 않는 `source_path`(`nonexistent/x.png`)의 자산을 SQL로 만들어(트리거가 job 생성) `npm run worker` 실행 → download가 매번 실패하므로 재시도 흐름이 실제로 돌았다.
+- 실제 결과: job `bdc54633…`이 `attempts=3`까지 시도 후 **status=`failed`**, `last_error="원본 download 실패: Object not found"`. 그 자산 `edea34eb…`는 **status=`failed`, `error_code=download_failed`, `error_message="원본 download 실패: Object not found"`**.
+- 상관 일치: jobs의 `asset_id`와 proof_assets의 `id`가 같은 `edea34eb…`.
+- → 실패가 그냥 멈춤이 아니라 **3회 재시도 후 failed로 분류되고 원인(error_code)이 남는 것**이 증명됨.
+
+**자료**
+
+- `037-obs-worker-retry-fail-20260612.png` — worker 터미널: 실패 자산 insert 후 `job 실패 — 재시도 예약`(error_code=`download_failed`)이 백오프 간격으로 반복되다 `failed 확정`.
+- `038-db-job-failed-20260612.png` — jobs 테이블: 실패 job `bdc54633…`가 `status=failed`, `attempts=3`, `last_error` 기록.
+- `039-db-asset-failed-20260612.png` — proof_assets 테이블: 자산 `edea34eb…`가 `status=failed`, `error_code=download_failed`, `error_message` 기록(정상 `ready` 자산들과 한 표에서 대비).
+
+**비고**
+
+- 실패 유도: **존재하지 않는 `source_path`의 자산**을 만들면 된다(예: `insert ... values (..., 'nonexistent/x.png', 'doits', 'image/png')`). 빠르게 보려면 `.env.local`에 `WORKER_RETRY_BASE_MS=1000`. `node --check` 통과.
+- 운영 메모(검증 중 발견): `.env.local`의 service_role 키가 **잘려 있으면** `claim_job`이 `Invalid API key`로 계속 실패한다. 이때 worker는 죽지 않고 폴링을 재시도하므로(복원력), 설정 오류가 가려질 수 있다 → 키 형식(JWT: 길이 ~200·점 2개) 점검 필요.
+
+**회고 — "프론트에서 막을 텐데 왜 worker 실패 처리까지?"**
+
+- 흔한 오해: 잘못된 파일은 프론트/서버 검증이 막으니 worker 실패 대비는 과한 것 아닌가?
+- 핵심은 **막는 대상이 다르다**는 것. 프론트(+서버 검증) = **입력 정합성**(비이미지·용량). worker 실패 = **운영(런타임) 문제** — 입력은 멀쩡한데 *그 주변 인프라가 삐끗*하는 경우다.
+- worker가 실제로 실패하는 경우: Storage 일시 다운·네트워크 끊김·rate limit(일시 장애), 처리 전 파일 삭제, 헤더만 통과한 깨진 파일, worker 크래시/OOM(stuck), 후속 처리(썸네일·외부 API) 실패 — **전부 프론트가 사전 차단 못 한다.**
+- 그래서 재시도/백오프/failed 분류는 입력 검증이 아니라 **운영 신뢰성** 장치다. 동기 CRUD엔 없고 비동기 파이프라인엔 본질적인 실패 모드라, 이 포트폴리오의 "장애 복구" 이야기의 핵심.
+- 검증에서 `nonexistent/x.png`를 insert한 건 "사용자가 bad row를 넣는다"가 아니라, 재현하기 어려운 일시 장애를 **결정적으로 시연**하기 위한 기법(프론트·업로드 경로를 건너뛰고 worker 실패 처리만 격리 테스트).

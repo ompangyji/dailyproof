@@ -12,8 +12,9 @@
  *   URL은 이미 있는 NEXT_PUBLIC_SUPABASE_URL 을 재사용한다(아래 fallback).
  *
  * 처리: 원본 download → sha256 checksum·size·차원(PNG/JPEG) 산출 → proof_assets 채우고
- *   상태 전이 uploaded→processing→ready, job done. 썸네일·적극 중복차단은 후속.
- *   실패 재시도/백오프/error_code도 후속.
+ *   상태 전이 uploaded→processing→ready, job done.
+ *   실패 시 지수 백오프 재시도(attempts/max_attempts·run_after), 초과 시 failed+error_code.
+ *   썸네일·적극 중복차단은 후속.
  */
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID, createHash } from "node:crypto";
@@ -22,6 +23,7 @@ import { hostname } from "node:os";
 const URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const POLL_IDLE_MS = Number(process.env.WORKER_POLL_IDLE_MS ?? 2000);
+const RETRY_BASE_MS = Number(process.env.WORKER_RETRY_BASE_MS ?? 5000); // 지수 백오프 기준
 
 // --- 구조화 로거: src/lib/log.ts 와 같은 JSON 한 줄 포맷(추후 web/worker 공통 모듈로 통합) ---
 const APP_ENV = process.env.APP_ENV ?? "dev";
@@ -44,6 +46,7 @@ if (!URL || !SERVICE_ROLE) {
 
 const supabase = createClient(URL, SERVICE_ROLE, { auth: { persistSession: false } });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const coded = (code, msg) => Object.assign(new Error(msg), { code }); // error_code 분류용
 
 let running = true;
 
@@ -82,10 +85,10 @@ async function processJob(job) {
   // 대상 자산 조회 → 원본 download
   const { data: asset, error: aErr } = await supabase
     .from("proof_assets").select("id, source_path").eq("id", job.asset_id).single();
-  if (aErr || !asset) throw new Error(`asset 조회 실패: ${aErr?.message ?? "not found"}`);
+  if (aErr || !asset) throw coded("asset_not_found", `asset 조회 실패: ${aErr?.message ?? "not found"}`);
 
   const { data: blob, error: dErr } = await supabase.storage.from("media").download(asset.source_path);
-  if (dErr || !blob) throw new Error(`원본 download 실패: ${dErr?.message ?? "no data"}`);
+  if (dErr || !blob) throw coded("download_failed", `원본 download 실패: ${dErr?.message ?? "no data"}`);
 
   // 후처리(가볍게): sha256 체크섬·실제 크기·차원
   const buf = Buffer.from(await blob.arrayBuffer());
@@ -101,6 +104,39 @@ async function processJob(job) {
   jlog.info("job 완료", {
     status: "ready", size_bytes: buf.length, width, height,
     checksum: checksum.slice(0, 12) + "…",
+  });
+}
+
+/**
+ * 처리 실패 분기. attempts < max_attempts면 지수 백오프로 재시도(job→pending + run_after),
+ * 도달했으면 job/asset을 failed로 확정하고 error_code를 남긴다.
+ * (attempts는 claim_job이 선점 시 이미 +1 해둔 값이다.)
+ */
+async function handleFailure(job, e) {
+  const jlog = logger({ job_id: job.id, asset_id: job.asset_id });
+  const code = e.code ?? "unknown";
+
+  if (job.attempts < job.max_attempts) {
+    const delayMs = RETRY_BASE_MS * 2 ** (job.attempts - 1); // 지수 백오프
+    const runAfter = new Date(Date.now() + delayMs).toISOString();
+    await supabase.from("jobs").update({
+      status: "pending", run_after: runAfter, last_error: e.message,
+      locked_at: null, locked_by: null, // 잠금 해제 → run_after 후 재선점
+    }).eq("id", job.id);
+    jlog.warn("job 실패 — 재시도 예약", {
+      error_code: code, error: e.message,
+      attempts: job.attempts, max_attempts: job.max_attempts, retry_in_ms: delayMs,
+    });
+    return;
+  }
+
+  // 최대 재시도 초과 → 확정 실패 (job·asset 모두 failed, error_code 기록)
+  await supabase.from("jobs").update({ status: "failed", last_error: e.message }).eq("id", job.id);
+  await supabase.from("proof_assets").update({
+    status: "failed", error_code: code, error_message: e.message,
+  }).eq("id", job.asset_id);
+  jlog.error("job 실패 — 최대 재시도 초과, failed 확정", {
+    error_code: code, error: e.message, attempts: job.attempts,
   });
 }
 
@@ -128,8 +164,7 @@ async function loop() {
     try {
       await processJob(job);
     } catch (e) {
-      // 실패 분류/재시도/백오프/error_code 는 후속 단계에서. 지금은 로그만.
-      log.error("job 처리 중 오류", { job_id: job.id, error: e.message });
+      await handleFailure(job, e);
     }
   }
   log.info("worker 종료 완료");
