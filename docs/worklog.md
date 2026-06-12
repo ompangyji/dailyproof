@@ -526,3 +526,46 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `022-obs-structured-log-20260611.png` — dev 터미널의 구조화 JSON 로그(`media served` + request_id/route/status).
 - `023-obs-request-id-header-20260611.png` — 홈 페이지 응답 헤더 `X-Request-Id` 부여 확인.
+- `024-git-pr4-open` / `025-git-pr4-merged` / `026-git-local-sync` — 이 작업을 PR #4로 main 반영(생성→merge→로컬 동기화).
+
+---
+
+## 2026-06-12
+
+### 1. worker 골격 + 폴링 루프
+
+**이전 상태 / 문제**
+
+- 업로드하면 `jobs`에 `pending`이 쌓이지만 **소비자(worker)가 없어** 영원히 처리되지 않았다. `proof_assets`는 `uploaded`에 멈춰 있고 큐만 길어진다.
+- → jobs를 집어 처리할 독립 worker 프로세스의 **뼈대**(폴링·선점·로그·종료)를 먼저 만든다.
+
+**목적**
+
+- 비동기 파이프라인의 **"배송 기사"** 를 두는 일. web이 접수(job 생성)만 하던 걸, 이제 별도 프로세스가 큐에서 일감을 꺼내 처리하기 시작한다. 이 골격 위에 실제 후처리와 실패 재시도가 차례로 얹힌다.
+
+**한 일**
+
+- `worker/worker.mjs` 신규: `SUPABASE_SERVICE_ROLE_KEY`로 접속(RLS 우회), `claim_job` 폴링 루프(빈 큐 백오프), 구조화 JSON 로그(앞서 도입한 request_id 기반 로거와 같은 한 줄 포맷에 `worker_id`/`job_id` 컨텍스트), SIGTERM/SIGINT **graceful shutdown**(진행 중 job 마무리 후 종료).
+- `claim_job`은 `FOR UPDATE SKIP LOCKED`라 여러 worker를 띄워도 같은 job을 잡지 않는다(동시성 안전).
+- 골격 단계라 `processJob`은 실제 후처리 없이 상태만 전이(→`ready`, job `done`)하는 **stub**. 실제 처리(download·checksum·메타데이터)는 다음 단계(성공 경로 처리 구현)에서 채운다.
+- `package.json`에 `worker` 스크립트(`node --env-file=.env.local`, 앱과 공용), `.env.example`에 worker env 문서화.
+
+**검증 (실제 동작 확인)**
+
+- Vercel 앱에서 이미지를 업로드해 pending job을 만든 뒤 `npm run worker` 실행 → worker가 그 job을 선점·처리.
+- 실제 결과: job `ff16de20…`이 처리되어 **`jobs.status`: pending → `done`** (`attempts=1`), 그 자산 **`proof_assets` `6bb283d1…`.`status`: uploaded → `ready`** (content_type `image/png`, size_bytes `2869424`).
+- **상관(correlation) 증거**: jobs 행의 `asset_id`(`6bb283d1…`)와 proof_assets 행의 `id`(`6bb283d1…`)가 **일치** → "그 job이 그 asset을 처리했다"가 로그+DB로 한 번에 증명된다(request_id처럼 식별자로 처리 흐름을 꿰는 관측성 패턴의 연장).
+- `width`/`height`는 아직 `NULL` — stub라 메타데이터 미산출. 즉 **선점·상태 전이는 진짜로 동작**하고, 후처리 "내용"만 비어 있는 상태(실제 처리 구현 시 채움).
+
+**자료**
+
+- `027-obs-worker-start-20260612.png` — `npm run worker`(= `node --env-file=.env.local`) 기동 + `worker 시작` 구조화 JSON 로그.
+- `028-db-job-done-20260612.png` — jobs 테이블: job `ff16de20…`가 `status=done`, `attempts=1`, `asset_id=6bb283d1…`.
+- `029-db-asset-ready-20260612.png` — proof_assets 테이블: asset `6bb283d1…`가 `status=ready`(`image/png`, `2869424` bytes; `width`/`height`는 `NULL`).
+- → 028의 `asset_id`와 029의 `id`가 같은 `6bb283d1…` = worker가 그 job으로 그 asset을 ready로 전이시킨 것이 한눈에 증명됨.
+
+**비고**
+
+- worker는 `.mjs` + node 직접 실행(`notion-sync`와 동일 패턴, TS 툴링·네이티브 의존 회피). 공통 로거 통합은 추후 web/worker 공통 로그 포맷 통일 시 예정.
+- 시크릿: 기존 `.env.local`(앱과 공용, git 미추적)에 `SUPABASE_SERVICE_ROLE_KEY` 한 줄만 추가(URL은 `NEXT_PUBLIC_SUPABASE_URL` 재사용). **절대 커밋 금지.**
+- 빈 큐 주의: `claim_job(RETURNS public.jobs)`은 빈 큐에서 NULL을 반환하고 PostgREST가 이를 "전 컬럼 null인 한 행"으로 표현 → worker는 `job.id`로 실제 선점 여부를 판별(가드 추가).
