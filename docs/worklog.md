@@ -891,4 +891,25 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `061-db-asset-trace-20260615.png` — proof_assets 테이블: 새 asset에 `trace_id` 채워짐(이전 자산은 null).
 - `062-obs-worker-trace-20260615.png` — worker 로그: 새 asset의 `선점`/`완료`에 같은 `trace_id`(옛 asset은 null로 대비).
+- `063-git-pr14-open` / `064-git-pr14-merged` / `065-git-local-sync` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화).
 - `tsc`·worker `node --check`·`npm test`(6/6) 통과.
+
+### 7. 로그 예시 문서 (sample logs)
+
+**이전 상태 / 문제**
+
+- 구조화 로그를 찍긴 하는데, 어떤 이벤트가 어떤 필드로 남고 그걸로 무엇을 질의/상관하는지 **한곳에 정리된 게 없었다.** 로그를 처음 보는 사람은 필드 의미·활용을 알기 어렵다.
+- → 이벤트별 샘플 + 필드 사전 + 질의 예시를 문서로 남긴다.
+
+**목적**
+
+- 로그를 **"읽고 활용할 수 있게"** 만드는 일. 관측성은 로그를 찍는 것만이 아니라 그걸로 무엇을 질의·상관하느냐가 핵심(예: `trace_id`로 web→worker 추적). 이 문서가 그 사용법을 고정한다.
+
+**한 일**
+
+- `docs/architecture/logging.md` 작성: 공통/컨텍스트 **필드 사전**, web·worker **이벤트별 JSON 샘플**(media served·readiness·SIGTERM·job 선점/완료/실패-재시도/failed/claim 실패), **질의·상관 예시**(trace_id/request_id/error_code/status), Loki/Grafana·OTel 후속.
+- `README.md` 인덱스에 logging.md 추가.
+
+**비고**
+
+- 코드(공통 로거·worker·health)가 실제 찍는 로그와 1:1로 맞춤. 수집·대시보드(Loki/Grafana)·분산 트레이싱(OTel)은 [추후].
