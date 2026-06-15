@@ -69,16 +69,17 @@ function imageDimensions(buf) {
  * uploaded→processing(시작)→ready(완료). 실패 시 throw → 루프에서 로그(재시도는 후속).
  */
 async function processJob(job) {
-  const jlog = log.with({ job_id: job.id, asset_id: job.asset_id });
+  // 자산을 먼저 조회(trace_id 포함) → 모든 job 로그에 업로드 때 부여된 trace_id를 붙여
+  // web→worker 흐름을 같은 id로 상관시킨다.
+  const { data: asset, error: aErr } = await supabase
+    .from("proof_assets").select("id, source_path, trace_id").eq("id", job.asset_id).single();
+  if (aErr || !asset) throw coded("asset_not_found", `asset 조회 실패: ${aErr?.message ?? "not found"}`);
+
+  const jlog = log.with({ job_id: job.id, asset_id: job.asset_id, trace_id: asset.trace_id ?? null });
   jlog.info("job 선점", { attempts: job.attempts, type: job.type });
 
   // 처리 중 표시
   await supabase.from("proof_assets").update({ status: "processing" }).eq("id", job.asset_id);
-
-  // 대상 자산 조회 → 원본 download
-  const { data: asset, error: aErr } = await supabase
-    .from("proof_assets").select("id, source_path").eq("id", job.asset_id).single();
-  if (aErr || !asset) throw coded("asset_not_found", `asset 조회 실패: ${aErr?.message ?? "not found"}`);
 
   const { data: blob, error: dErr } = await withTimeout(
     () => supabase.storage.from("media").download(asset.source_path),

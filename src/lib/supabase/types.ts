@@ -66,6 +66,7 @@ export type ProofAsset = {
   id: string;
   user_id: string;
   source_path: string;
+  trace_id: string | null;
   kind: "doits" | "pages" | null;
   status: "uploaded" | "processing" | "ready" | "failed";
   content_type: string | null;

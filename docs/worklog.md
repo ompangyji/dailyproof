@@ -852,3 +852,43 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - `057-test-logger-pass-20260615.png` — `npm test` 결과: 로거 2 + resilience 4 = **6 케이스 전부 통과**(tests 6 / pass 6 / fail 0). 의미: 공통 로거의 JSON 포맷·컨텍스트 누적이 자동 테스트로 고정됨 → web/worker가 같은 구현을 쓰는 것 + 출력 형태가 회귀 없이 보장된다.
+- `058-git-pr13-open` / `059-git-pr13-merged` / `060-git-local-sync` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화).
+
+### 6. trace_id 전파 (web→worker)
+
+**이전 상태 / 문제**
+
+- 요청 식별자(request_id)는 web 서버 라우트 안에서만 흐르고, **업로드→worker라는 비동기 경계를 넘지 못했다.** 한 업로드가 worker에서 언제·어떻게 처리/실패했는지를 **하나의 id로 잇는 끈**이 없었다.
+- → 업로드 때 부여한 식별자(`trace_id`)를 자산에 실어 worker까지 같은 id로 잇는다.
+
+**목적**
+
+- **비동기 경계를 넘는 추적**. 업로드(web)와 후처리(worker)는 시간·프로세스가 떨어져 있는데, 같은 `trace_id`를 공유하면 "이 업로드가 어떻게 처리됐나"를 id 하나로 따라갈 수 있다. 관측성(요청 상관)의 마지막 조각.
+
+**한 일**
+
+- `supabase/schema.sql`: `proof_assets.trace_id` 컬럼 추가(멱등 `add column if not exists`).
+- `src/lib/supabase/upload.ts`: 업로드마다 `trace_id`(uuid) 생성 → asset insert에 저장. `types.ts`에 필드 추가.
+- `worker/worker.mjs`: 자산을 먼저 조회(`trace_id` 포함)해 job 로거에 `trace_id`를 바인딩 → 선점·완료 등 모든 job 로그가 그 id를 단다.
+
+**핵심 설계**
+
+- trace_id는 **업로드 시점(web)에 발급**되어 **DB(asset)를 매개로** worker에 전파된다 — 우리 구조엔 web→worker 직접 호출이 없으므로 "비동기 전파"가 핵심.
+- worker는 asset에서 읽어 모든 로그에 포함 → **`proof_assets.trace_id` ↔ worker 로그 `trace_id`** 가 일치.
+
+**비고 / 검증 방법**
+
+- 적용: Supabase SQL Editor에서 `schema.sql` 재실행(`trace_id` 컬럼 추가).
+- 검증: 새 이미지 업로드 → `proof_assets` 행에 `trace_id` 채워짐 → `npm run worker` → worker 로그(job 선점/완료)에 **같은 trace_id**. DB의 trace_id와 로그의 trace_id가 일치하면 web→worker 추적 성립.
+- **설계 메모(eager 처리 + 고아 GC 후속)**: asset/job은 **저장이 아니라 업로드(사진 추가) 즉시** 생성된다(파이프라인을 UI 저장과 무관하게 일찍 돌리는 의도). 그 대가로 사진 추가 후 저장 안 하면 어떤 doit에도 안 묶인 **고아 asset/storage**가 남는데, 참조 안 되는 것들을 주기적으로 정리하는 **GC는 후속**으로 둔다(`worker.md` 후속 참고).
+
+**검증 (실제 동작 확인)**
+
+- 로컬 `npm run dev`(이 브랜치)에서 새 이미지 업로드 → 그 asset `93f2eba6…`에 `trace_id=85690c5a…` 부여 → `npm run worker` → 그 job의 `선점`·`완료` 로그에 **같은 `trace_id=85690c5a…`**. DB ↔ worker 로그 trace_id 일치 = web→worker 추적 성립.
+- **before/after 대비**: 같은 worker 실행 로그에서 구코드(Vercel/main)로 올라온 옛 asset은 `trace_id:null`, 새 코드로 올린 asset은 `85690c5a…` → "trace_id를 박는 코드로 올린 것만 추적된다"가 한 화면에 드러남.
+
+**자료**
+
+- `061-db-asset-trace-20260615.png` — proof_assets 테이블: 새 asset에 `trace_id` 채워짐(이전 자산은 null).
+- `062-obs-worker-trace-20260615.png` — worker 로그: 새 asset의 `선점`/`완료`에 같은 `trace_id`(옛 asset은 null로 대비).
+- `tsc`·worker `node --check`·`npm test`(6/6) 통과.

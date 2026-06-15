@@ -106,5 +106,6 @@ npm run worker   # = node --env-file=.env.local worker/worker.mjs (Node 20.6+)
 ## 8. 후속 / 운영 메모
 
 - **stuck job 회수**: worker가 처리 중 죽으면 job이 `processing`+`locked_at`인 채 남는다. `locked_at`이 오래된 job을 `pending`으로 되돌리는 회수 로직은 후속.
+- **고아(orphan) GC**: 업로드(사진 추가) 즉시 asset/job을 만드는 eager 처리라, 사용자가 저장하지 않고 취소하면 **어떤 doit에도 안 묶인 asset·storage 객체**가 남는다(파이프라인을 일찍 돌리려는 의도적 트레이드오프). 참조되지 않는 자산·storage를 주기적으로 정리하는 GC는 후속.
 - **컨테이너화 → k3s**: 추후 Docker 이미지로 묶어 별도 Deployment로 배포, 큐 적체 기반 HPA.
 - **검증 중 발견(운영 함정)**: `.env.local`의 service_role 키가 잘리면 `claim_job`이 `Invalid API key`로 계속 실패한다. worker는 죽지 않고 폴링을 재시도하므로(복원력) 설정 오류가 가려질 수 있다 → 키 형식(JWT: 길이 ~200·점 2개)을 점검한다.
