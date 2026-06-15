@@ -820,3 +820,35 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **비고**
 
 - 지금 쓸 수 있는 **수동 절차** + k3s/ArgoCD/Grafana 단계에서 **자동화될 지점([추후])** 을 함께 표기. 코드(worker·health)와 1:1로 일치.
+
+### 5. 공통 로거 모듈 통합 (web/worker)
+
+**이전 상태 / 문제**
+
+- 로거가 **두 벌**이었다 — web(`src/lib/log.ts`)과 worker(`worker.mjs` 인라인). 포맷은 비슷했지만 **두 곳을 따로 고쳐야 하고 어긋날 위험**이 있었다(필드·레벨 처리가 갈라질 수 있음).
+- → 로그 포맷·로직을 **한 곳에서 정의**해 모든 컴포넌트가 같은 모양으로 찍게 한다.
+
+**목적**
+
+- 관측성의 "**한 입구**". 포맷이 한 곳이면 수집·검색·상관(예: `request_id`/`trace_id`로 추적)이 컴포넌트 무관하게 일관된다. 이후 trace 전파·로그 예시도 이 단일 로거 위에 얹힌다.
+
+**한 일**
+
+- `lib/log.mjs`(순수 JS 공통 구현) + `lib/log.d.mts`(TS 타입) 신규 — JSON 한 줄 포맷, `LOG_LEVEL`/`APP_ENV`, `createLogger`/`with`/`log`.
+- `src/lib/log.ts`는 그 공통 모듈을 **재export**만 하도록 축소 → web 코드는 기존처럼 `@/lib/log`에서 import(사용처 무변경).
+- `worker/worker.mjs`: 인라인 `emit`/`logger` 제거 → 공통 `createLogger` import, `worker_id`를 기본 컨텍스트로(`log.with(...)`).
+- `lib/log.test.mjs`(node:test): JSON 구조·컨텍스트 누적 2케이스.
+
+**핵심 설계**
+
+- web(TS)↔worker(.mjs) **모듈 경계**는 `resilience.mjs`와 같은 패턴으로 넘는다 — **.mjs 단일 구현 + .d.mts 타입**. 그래서 한 구현을 양쪽이 공유한다.
+- 공개 API(`createLogger`/`with`/`log`)를 유지해 기존 사용처(미디어 프록시·readiness·instrumentation·worker)를 안 건드림.
+
+**검증 (실제 동작 확인)**
+
+- `npm test` → **tests 6 / pass 6 / fail 0**(로거 2 + resilience 4). `tsc --noEmit`·worker `node --check` 통과.
+- 즉 web/worker가 **같은 단일 구현**을 쓰고, 로거 출력 포맷이 테스트로 고정됨.
+
+**자료**
+
+- `057-test-logger-pass-20260615.png` — `npm test` 결과: 로거 2 + resilience 4 = **6 케이스 전부 통과**(tests 6 / pass 6 / fail 0). 의미: 공통 로거의 JSON 포맷·컨텍스트 누적이 자동 테스트로 고정됨 → web/worker가 같은 구현을 쓰는 것 + 출력 형태가 회귀 없이 보장된다.
