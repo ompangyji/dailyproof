@@ -3,7 +3,7 @@
 DailyProof의 **현재 상태**(`architecture/current-state.md`)와 포트폴리오가 요구하는 **목표 DevOps 범위**(`CoverLetter/devops/Portfolio` 실행계획의 18개 항목 + 기반 인프라 요소)를 항목별로 비교한다.
 
 이 문서의 목적은 "무엇이, 얼마나 비어 있는가"를 드러내는 것이다.
-"무엇을 직접 구현하고 무엇을 문서/설계로 대체할지"의 결정은 다음 문서(`gap-analysis.md`의 구현/대체 구분 절 → Day1-4)에서 이어서 다룬다.
+"무엇을 직접 구현하고 무엇을 문서/설계로 대체할지"의 결정은 `gap-analysis.md`의 구현/대체 구분 절에서 이어서 다룬다.
 
 분석 기준일: 2026-06-09
 
@@ -147,5 +147,5 @@ DailyProof의 **현재 상태**(`architecture/current-state.md`)와 포트폴리
 
 ## 7. 다음 작업
 
-- [Day1-5] `architecture/target-architecture.md` — 높음 우선순위(✅ 직접 항목)를 묶는 목표 구조와 핵심 시나리오
-- [Day1-7] `proof_assets`/job 모델 DB 스키마 초안
+- `architecture/target-architecture.md` — 높음 우선순위(✅ 직접 항목)를 묶는 목표 구조와 핵심 시나리오
+- `proof_assets`/job 모델 DB 스키마 초안

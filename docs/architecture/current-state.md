@@ -141,6 +141,6 @@ src/
 
 ## 8. 다음 작업 연결
 
-- [Day1-3] `plan/gap-analysis.md` — 위 "아직 없는 것"을 목표 DevOps 범위와 정식 비교
-- [Day1-5] `architecture/target-architecture.md` — web/worker/queue/storage 목표 구조
-- [Day1-7] DB 스키마 초안 — 업로드 후처리를 위한 `proof_assets`/job 모델 설계
+- `plan/gap-analysis.md` — 위 "아직 없는 것"을 목표 DevOps 범위와 정식 비교
+- `architecture/target-architecture.md` — web/worker/queue/storage 목표 구조
+- DB 스키마 초안 — 업로드 후처리를 위한 `proof_assets`/job 모델 설계
