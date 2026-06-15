@@ -34,10 +34,17 @@ export async function GET(req: Request) {
     });
   }
 
-  const snap = data as { jobs?: Record<string, number>; assets?: Record<string, number> };
+  const snap = data as {
+    jobs?: Record<string, number>;
+    assets?: Record<string, number>;
+    job_processing_seconds_avg?: number;
+  };
   const body = [
     ...gauge("dailyproof_jobs_total", "Jobs by status (pending = queue depth)", snap.jobs, JOB_STATUSES),
     ...gauge("dailyproof_assets_total", "Proof assets by status (failed = upload/처리 실패)", snap.assets, ASSET_STATUSES),
+    "# HELP dailyproof_job_processing_seconds_avg Recent avg job processing time claim→done (seconds), approx",
+    "# TYPE dailyproof_job_processing_seconds_avg gauge",
+    `dailyproof_job_processing_seconds_avg ${snap.job_processing_seconds_avg ?? 0}`,
     "",
   ].join("\n");
 

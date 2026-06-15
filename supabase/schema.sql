@@ -501,6 +501,15 @@ as $$
     'assets', (
       select coalesce(jsonb_object_agg(status, c), '{}'::jsonb)
       from (select status, count(*)::int c from public.proof_assets group by status) a
+    ),
+    -- 최근 done job 100건의 처리 시간(claim locked_at → done updated_at) 평균 초.
+    -- locked_at 기준이라 큐 대기 시간은 제외한 '순수 처리 시간' 근사. 정식 histogram은 [추후].
+    'job_processing_seconds_avg', (
+      select coalesce(round(avg(extract(epoch from (updated_at - locked_at)))::numeric, 3), 0)
+      from (
+        select locked_at, updated_at from public.jobs
+        where status = 'done' and locked_at is not null order by updated_at desc limit 100
+      ) d
     )
   );
 $$;
