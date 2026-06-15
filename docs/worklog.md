@@ -760,3 +760,41 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - 이 동작(SIGTERM → readiness 503 → 오케스트레이터가 트래픽 제외 → 무중단 종료)은 **오케스트레이터(k3s)가 있어야 끝까지 검증된다.** `next dev`는 SIGTERM에서 그냥 종료될 수 있어 로컬 단독 검증은 의미가 약해, **이번 단계에선 동작 검증을 생략**했다.
 - **➡ 추후 k3s 배포 단계에서 검증**: readiness probe + 롤링 업데이트로 "종료되는 pod가 `/health/ready` 503을 띄우고 트래픽이 새 pod로 빠지는지"를 실제로 확인한다(이 task의 런타임 검증은 그때로 미룸).
 - 지금 확정된 것: 코드·타입체크(`tsc`) 통과, readiness 라우트의 `checks.shutdown` 503 분기 구현 완료. 즉 **로직은 들어갔고, 그 효과의 실증만 k3s로 미룬 것.**
+
+**자료**
+
+- `050-git-pr10-open` / `051-git-pr10-merged` / `052-git-local-sync` — 이 작업을 PR #10으로 main 반영(생성→merge→로컬 동기화).
+
+### 3. 외부 호출 timeout/retry 견고화 + 단위 테스트
+
+**이전 상태 / 문제**
+
+- 외부 호출(Supabase rpc·storage download)에 **시간 제한이 없어**, 의존성이 응답을 안 주면 호출이 **무한정 매달릴(행)** 수 있었다. worker가 한 job에 영영 묶이면 큐 전체가 멈춘다.
+- 또 검증을 늘 수동(스샷)으로만 했는데, timeout/retry 같은 **순수 로직은 자동 테스트로 결정적으로** 증명하는 게 맞다.
+- → 시간 제한·재시도를 공통 유틸로 빼고, **node:test**로 동작을 못박는다.
+
+**목적**
+
+- **"무한정 기다리지 않기"** = 운영 신뢰성의 기본. 한 느린 호출이 워커/요청 전체를 묶지 않게 상한을 둔다. 또 이 로직을 **테스트로 고정**해 회귀를 막고, 나중에 CI 게이트(lint·build·test)의 그 `test`가 된다.
+
+**한 일**
+
+- `lib/resilience.mjs`: `withTimeout(fn, ms)`(제한 초과 시 `TimeoutError(code=timeout)`), `withRetry(fn, {retries, baseMs})`(지수 백오프) — 외부 의존성 없는 순수 함수.
+- `lib/resilience.test.mjs` + `package.json`의 `test` 스크립트(`node --test`): timeout 성공/초과, retry N번째 성공/전부 실패+시도횟수 — **4 케이스**.
+- `worker/worker.mjs`: `claim_job`·`download` 호출을 `withTimeout(…, WORKER_CALL_TIMEOUT_MS)`으로 감쌈 → 행 방지. download 타임아웃은 `error_code=timeout`으로 분류돼 기존 job 재시도에 연결.
+- `.env.example`에 `WORKER_CALL_TIMEOUT_MS`.
+
+**핵심 설계**
+
+- timeout은 **취소가 아니라 "그만 기다림"**(underlying 요청은 계속될 수 있으나 결과를 버리고 진행). 목적은 무한 대기 차단.
+- 재시도는 **호출 수준**(withRetry)과 **job 수준**(worker handleFailure)이 층이 다름 — 이번엔 worker엔 timeout만 걸고 재시도는 기존 job 재시도가 받게 해 중복 재시도를 피함.
+- web 적용은 모듈 경계(TS↔.mjs)상 web/worker 공통화 단계에서 연결(현재는 worker가 사용).
+
+**검증 (실제 동작 확인)**
+
+- `npm test` → **tests 4 / pass 4 / fail 0** (`withTimeout`·`withRetry` 결정적 검증). worker `node --check`·`tsc` 통과.
+- 즉 timeout/retry 동작이 **자동 테스트로 증명**됨(수동 재현 불필요). 이 `test`는 추후 GitHub Actions CI의 lint·build·test 게이트에 연결.
+
+**자료**
+
+- `053-test-resilience-pass-20260615.png` — `npm test`(node:test) 실행 결과. `withTimeout`·`withRetry` **4 케이스 전부 통과**(tests 4 / pass 4 / fail 0). 의미: timeout/retry 같은 순수 로직을 **결정적 자동 테스트로 고정** = 수동 재현·스샷에 의존하지 않고 회귀를 막는다. 이 출력이 곧 추후 CI 게이트(lint·build·test)의 `test` 단계가 통과하는 모습이다.

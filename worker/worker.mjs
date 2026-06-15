@@ -19,11 +19,13 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID, createHash } from "node:crypto";
 import { hostname } from "node:os";
+import { withTimeout } from "../lib/resilience.mjs";
 
 const URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const POLL_IDLE_MS = Number(process.env.WORKER_POLL_IDLE_MS ?? 2000);
 const RETRY_BASE_MS = Number(process.env.WORKER_RETRY_BASE_MS ?? 5000); // 지수 백오프 기준
+const CALL_TIMEOUT_MS = Number(process.env.WORKER_CALL_TIMEOUT_MS ?? 10000); // 외부 호출 상한
 
 // --- 구조화 로거: src/lib/log.ts 와 같은 JSON 한 줄 포맷(추후 web/worker 공통 모듈로 통합) ---
 const APP_ENV = process.env.APP_ENV ?? "dev";
@@ -87,7 +89,10 @@ async function processJob(job) {
     .from("proof_assets").select("id, source_path").eq("id", job.asset_id).single();
   if (aErr || !asset) throw coded("asset_not_found", `asset 조회 실패: ${aErr?.message ?? "not found"}`);
 
-  const { data: blob, error: dErr } = await supabase.storage.from("media").download(asset.source_path);
+  const { data: blob, error: dErr } = await withTimeout(
+    () => supabase.storage.from("media").download(asset.source_path),
+    CALL_TIMEOUT_MS, "download",
+  );
   if (dErr || !blob) throw coded("download_failed", `원본 download 실패: ${dErr?.message ?? "no data"}`);
 
   // 후처리(가볍게): sha256 체크섬·실제 크기·차원
@@ -145,7 +150,10 @@ async function loop() {
   while (running) {
     let job;
     try {
-      const { data, error } = await supabase.rpc("claim_job", { p_worker: WORKER_ID });
+      const { data, error } = await withTimeout(
+        () => supabase.rpc("claim_job", { p_worker: WORKER_ID }),
+        CALL_TIMEOUT_MS, "claim_job",
+      );
       if (error) throw error;
       job = data;
     } catch (e) {
