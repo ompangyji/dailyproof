@@ -726,7 +726,37 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `045-obs-health-live-20260615.png` — 브라우저 `/health/live` 200 `{"status":"ok"}` + 터미널 `GET /health/live 200`.
 - `046-obs-health-ready-20260615.png` — 브라우저 `/health/ready` 200 `{"ready":true,"checks":{"db":{"ok":true,"ms":1005}}}` + 터미널 readiness 구조화 로그.
+- `047-git-pr9-open` / `048-git-pr9-merged` / `049-git-local-sync` — 이 작업을 PR #9로 main 반영(생성→merge→로컬 동기화).
 
 **비고**
 
 - live ≠ ready 분리 유지. ready의 `checks.db`는 다음 단계에서 timeout/retry 래퍼로 감싸 `attempts`·timeout까지 노출 예정(의존성 끊으면 503).
+
+### 2. graceful shutdown + readiness 연동
+
+**이전 상태 / 문제**
+
+- web은 종료 신호를 받아도 readiness가 그대로 200이라, 오케스트레이터가 **종료 중인 인스턴스에도 새 트래픽을 계속 보낼** 수 있었다(요청이 중간에 끊김). (worker는 이미 graceful shutdown 보유.)
+- → 종료 신호 시 readiness를 떨궈 **트래픽을 먼저 끊고** 안전하게 빠지게 한다.
+
+**목적**
+
+- **무중단 배포·종료의 핵심**. 롤링 업데이트로 pod가 교체될 때, 종료되는 인스턴스가 `readiness=503`으로 "나 빼!"라고 알리면 오케스트레이터가 트래픽을 새 pod로 보내고 기존 요청만 마무리한 뒤 종료한다 → 사용자는 끊김을 못 느낀다.
+
+**한 일**
+
+- `src/lib/lifecycle.ts`: 종료 플래그(`isShuttingDown`/`beginShutdown`) 모듈 싱글톤.
+- `src/instrumentation.ts`: Next 서버 시작 훅. nodejs 런타임에서 **SIGTERM**을 잡아 `beginShutdown()` + 로그. (SIGINT는 미처리 — 로컬 개발 종료에 영향 없음.)
+- `/health/ready`: 종료 중이면 DB 점검과 무관하게 **503**(`checks.shutdown`) 반환.
+- worker는 이미 SIGTERM/SIGINT graceful shutdown 보유(진행 중 job 마무리 후 종료) — web과 동일 사상.
+
+**핵심 설계**
+
+- web의 "트래픽 중단·drain"은 앱이 직접 하지 않는다 — **readiness 503을 본 오케스트레이터가 endpoint에서 빼고 grace period 동안 drain**한다. 앱의 책임은 "readiness를 정확히 내리는 것"까지.
+- **왜 SIGTERM만 처리하고 SIGINT는 미처리인가**: SIGTERM은 오케스트레이터(k3s)가 pod를 정상 종료할 때 보내는 신호라, 여기에 graceful shutdown(readiness 내림)을 건다. 반면 **SIGINT**는 터미널에서 실행 중인 프로세스를 직접 중단할 때(인터럽트 신호, 예: Ctrl+C) 오는 신호인데, 이걸 우리가 가로채면 **Node의 기본 종료 동작이 막혀 로컬 dev를 멈추기 어려워진다.** 그래서 운영 종료 신호(SIGTERM)에만 로직을 걸고 SIGINT는 **일부러 처리하지 않는다(미처리)** = 로컬 개발 중단은 평소대로 둔다.
+
+**검증 — 이번엔 생략, 추후 k3s에서 검증 예정**
+
+- 이 동작(SIGTERM → readiness 503 → 오케스트레이터가 트래픽 제외 → 무중단 종료)은 **오케스트레이터(k3s)가 있어야 끝까지 검증된다.** `next dev`는 SIGTERM에서 그냥 종료될 수 있어 로컬 단독 검증은 의미가 약해, **이번 단계에선 동작 검증을 생략**했다.
+- **➡ 추후 k3s 배포 단계에서 검증**: readiness probe + 롤링 업데이트로 "종료되는 pod가 `/health/ready` 503을 띄우고 트래픽이 새 pod로 빠지는지"를 실제로 확인한다(이 task의 런타임 검증은 그때로 미룸).
+- 지금 확정된 것: 코드·타입체크(`tsc`) 통과, readiness 라우트의 `checks.shutdown` 503 분기 구현 완료. 즉 **로직은 들어갔고, 그 효과의 실증만 k3s로 미룬 것.**
