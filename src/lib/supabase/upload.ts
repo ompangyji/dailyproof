@@ -40,9 +40,12 @@ export async function uploadImage(file: File, kind: UploadKind): Promise<string>
   // Register the asset for async post-processing. A DB trigger
   // (proof_assets_enqueue) enqueues a `jobs` row for the worker.
   // Metadata we know up front; width/height/checksum/thumb are filled later.
+  // 업로드마다 추적 id 부여 → asset에 저장 → worker가 그 id로 로그(web→worker 상관).
+  const traceId = crypto.randomUUID();
   const { error: assetErr } = await supabase.from("proof_assets").insert({
     user_id: user.id,
     source_path: path,
+    trace_id: traceId,
     kind,
     status: "uploaded",
     content_type: file.type,
