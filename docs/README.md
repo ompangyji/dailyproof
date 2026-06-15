@@ -80,6 +80,7 @@
 - [x] `architecture/current-state.md` — 현재 프로젝트 구조 분석
 - [x] `architecture/erd-before.md` — DB ERD (proof_assets/jobs 통합 전)
 - [x] `architecture/erd-after.md` — DB ERD (proof_assets/jobs 추가 후)
+- [x] `architecture/worker.md` — 후처리 worker 상태 전이·운영(폴링·재시도·error_code)
 - [x] `architecture/target-architecture.md` — 목표 아키텍처 + 핵심 시나리오
 - [x] `architecture/environments.md` — dev/staging/prod 환경 분리 전략
 - [x] `architecture/branching.md` — 브랜치 전략(GitHub Flow + 환경 승격)

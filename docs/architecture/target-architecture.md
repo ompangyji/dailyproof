@@ -136,7 +136,7 @@ stateDiagram-v2
     ready --> [*]
 ```
 
-이 상태 모델이 비동기 파이프라인·재처리·실패 복구·운영 가시성의 근거가 된다. (상세 스키마는 Day1-7)
+이 상태 모델이 비동기 파이프라인·재처리·실패 복구·운영 가시성의 근거가 된다. (worker 처리·상태 전이·운영 상세는 `worker.md`)
 
 ---
 
@@ -145,7 +145,7 @@ stateDiagram-v2
 - **메트릭**: web/worker가 `/metrics` 노출 → Prometheus scrape → Grafana 대시보드.
 - **로그**: web/worker 공통 JSON 로그(`request_id`·`trace_id`·`user_id`·`asset_id`·`job_id`·`error_code`) → Loki.
 - **트레이스**: OTel로 web 요청 → worker → DB까지 span 전파.
-- **네트워크**: 사용자 → Traefik ingress(TLS 종료) → web service → pod. body size 제한·upstream timeout·keep-alive는 ingress/앱에서 명시(상세는 `network.md`, Day13).
+- **네트워크**: 사용자 → Traefik ingress(TLS 종료) → web service → pod. body size 제한·upstream timeout·keep-alive는 ingress/앱에서 명시(상세는 `network.md`, 추후).
 
 ---
 
@@ -167,5 +167,5 @@ stateless 컨테이너·외부 시크릿 주입·object storage 분리를 유지
 
 ## 8. 다음 작업
 
-- [Day1-6] `architecture/environments.md` — dev/staging/prod 환경 분리 전략
-- [Day1-7] `proof_assets`/`jobs` DB 스키마 초안
+- `architecture/environments.md` — dev/staging/prod 환경 분리 전략
+- `proof_assets`/`jobs` DB 스키마 초안
