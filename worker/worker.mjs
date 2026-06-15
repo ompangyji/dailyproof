@@ -20,6 +20,7 @@ import { createClient } from "@supabase/supabase-js";
 import { randomUUID, createHash } from "node:crypto";
 import { hostname } from "node:os";
 import { withTimeout } from "../lib/resilience.mjs";
+import { createLogger } from "../lib/log.mjs";
 
 const URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -27,19 +28,9 @@ const POLL_IDLE_MS = Number(process.env.WORKER_POLL_IDLE_MS ?? 2000);
 const RETRY_BASE_MS = Number(process.env.WORKER_RETRY_BASE_MS ?? 5000); // 지수 백오프 기준
 const CALL_TIMEOUT_MS = Number(process.env.WORKER_CALL_TIMEOUT_MS ?? 10000); // 외부 호출 상한
 
-// --- 구조화 로거: src/lib/log.ts 와 같은 JSON 한 줄 포맷(추후 web/worker 공통 모듈로 통합) ---
-const APP_ENV = process.env.APP_ENV ?? "dev";
-function emit(level, msg, fields) {
-  const line = JSON.stringify({ ts: new Date().toISOString(), level, env: APP_ENV, msg, ...fields });
-  (level === "error" || level === "warn" ? console.error : console.log)(line);
-}
+// 공통 로거(lib/log.mjs) — web과 같은 JSON 포맷. worker_id를 기본 컨텍스트로 고정.
 const WORKER_ID = `${hostname()}-${randomUUID().slice(0, 8)}`;
-const logger = (ctx = {}) => ({
-  info: (m, f) => emit("info", m, { worker_id: WORKER_ID, ...ctx, ...f }),
-  warn: (m, f) => emit("warn", m, { worker_id: WORKER_ID, ...ctx, ...f }),
-  error: (m, f) => emit("error", m, { worker_id: WORKER_ID, ...ctx, ...f }),
-});
-const log = logger();
+const log = createLogger({ worker_id: WORKER_ID });
 
 if (!URL || !SERVICE_ROLE) {
   log.error("worker 시작 실패: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 가 필요합니다");
@@ -78,7 +69,7 @@ function imageDimensions(buf) {
  * uploaded→processing(시작)→ready(완료). 실패 시 throw → 루프에서 로그(재시도는 후속).
  */
 async function processJob(job) {
-  const jlog = logger({ job_id: job.id, asset_id: job.asset_id });
+  const jlog = log.with({ job_id: job.id, asset_id: job.asset_id });
   jlog.info("job 선점", { attempts: job.attempts, type: job.type });
 
   // 처리 중 표시
@@ -118,7 +109,7 @@ async function processJob(job) {
  * (attempts는 claim_job이 선점 시 이미 +1 해둔 값이다.)
  */
 async function handleFailure(job, e) {
-  const jlog = logger({ job_id: job.id, asset_id: job.asset_id });
+  const jlog = log.with({ job_id: job.id, asset_id: job.asset_id });
   const code = e.code ?? "unknown";
 
   if (job.attempts < job.max_attempts) {
