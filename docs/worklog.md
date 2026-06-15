@@ -383,7 +383,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **한 일**
 
-- `branching.md` 전략대로 **첫 PR 흐름을 실제로 한 바퀴 수행**: `feature/async-pipeline` push → PR #1 생성(제목·설명 작성) → CI(Vercel) 통과 → **squash merge** → `main` 동기화(`pull --ff-only`) → 작업 브랜치 정리(로컬·원격 삭제).
+- `branching.md` 전략대로 **첫 PR 흐름을 실제로 한 바퀴 수행**: `feature/async-pipeline` push → PR 생성(제목·설명 작성) → CI(Vercel) 통과 → **squash merge** → `main` 동기화(`pull --ff-only`) → 작업 브랜치 정리(로컬·원격 삭제).
 - 커밋 author를 본인(`ompangyji <ompangyji@gmail.com>`)으로 교정. 전역 git 설정이 `Backend API Agent`라 그대로 커밋돼 있었고, 이 때문에 Vercel이 프리뷰 빌드를 거부했다.
 - 이미 push돼 있던 브랜치라 author 교정분을 force-push로 반영.
 
@@ -439,7 +439,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `008-1-app-upload-doit.png` / `008-2-app-upload-doit.png` — 업로드(다이얼로그 첨부 / 저장된 doit)
 - `009-db-proof-assets-row.png` — proof_assets 새 행(status=uploaded)
 - `010-db-jobs-row.png` — jobs 새 행(status=pending, asset_id 일치)
-- `011-git-pr2-open` / `012-git-pr2-merged` / `013-git-local-sync` — 이 작업을 PR #2로 main 반영(생성→merge→로컬 동기화)
+- `011-git-pr2-open` / `012-git-pr2-merged` / `013-git-local-sync` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화)
 
 **비고**
 
@@ -487,7 +487,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
   - `017-sec-ui-server-reject-20260611.png` — 우회 상태에서 PDF 업로드 → UI에 `mime type application/pdf is not supported`. **클라를 뚫어도 Storage(서버)가 막는다**.
   - `018-sec-ui-client-reject-20260611.png` — 원복(정상) 후 같은 PDF → UI에 `Only image files are supported.`. **정상 경로에선 클라이언트가 1차로 막는다**.
 - 종합: 014/015는 설정·DB 게이트, 017/018은 같은 입력(PDF)을 **클라+서버 두 겹이 각각 차단**(016이 그 우회 조건을 설명). 다층 방어(defense in depth)가 설정·동작 모두 증명됨.
-- `019-git-pr3-open` / `020-git-pr3-merged` / `021-git-local-sync` — 이 작업을 PR #3으로 main 반영(생성→merge→로컬 동기화).
+- `019-git-pr3-open` / `020-git-pr3-merged` / `021-git-local-sync` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화).
 
 ### 4. request_id 주입 + 구조화 로그 유틸 초안
 
@@ -526,7 +526,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `022-obs-structured-log-20260611.png` — dev 터미널의 구조화 JSON 로그(`media served` + request_id/route/status).
 - `023-obs-request-id-header-20260611.png` — 홈 페이지 응답 헤더 `X-Request-Id` 부여 확인.
-- `024-git-pr4-open` / `025-git-pr4-merged` / `026-git-local-sync` — 이 작업을 PR #4로 main 반영(생성→merge→로컬 동기화).
+- `024-git-pr4-open` / `025-git-pr4-merged` / `026-git-local-sync` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화).
 
 ---
 
@@ -563,7 +563,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `028-db-job-done-20260612.png` — jobs 테이블: job `ff16de20…`가 `status=done`, `attempts=1`, `asset_id=6bb283d1…`.
 - `029-db-asset-ready-20260612.png` — proof_assets 테이블: asset `6bb283d1…`가 `status=ready`(`image/png`, `2869424` bytes; `width`/`height`는 `NULL`).
 - → 028의 `asset_id`와 029의 `id`가 같은 `6bb283d1…` = worker가 그 job으로 그 asset을 ready로 전이시킨 것이 한눈에 증명됨.
-- `030-git-pr5-open` / `031-git-pr5-merged` / `032-git-local-sync` — 이 작업을 PR #5로 main 반영(생성→merge→로컬 동기화).
+- `030-git-pr5-open` / `031-git-pr5-merged` / `032-git-local-sync` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화).
 
 **비고**
 
@@ -603,7 +603,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `033-obs-worker-process-20260612.png` — worker 터미널: `job 선점` → `job 완료` 로그. 완료 줄에 산출값(width/height/checksum 등)이 포함됨 = worker가 원본을 읽어 실제로 계산했다는 증거.
 - `034-db-asset-metadata-20260612.png` — proof_assets 테이블 2행 대비: 신규 `d9e47f53…`는 `width=1536`/`height=1024`/`checksum` 채워짐(real 처리), 이전 `6bb283d1…`는 `NULL`(stub). 같은 표에서 "처리 전(stub) vs 처리 후(real)"가 드러남.
-- `035-git-pr6-merged` / `036-git-local-sync` — 이 작업을 PR #6으로 main 반영(merge→로컬 동기화).
+- `035-git-pr6-merged` / `036-git-local-sync` — 이 작업을 PR로 main에 반영(merge→로컬 동기화).
 
 **비고**
 
@@ -661,7 +661,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **자료**
 
-- `040-git-pr7-merged` / `041-git-local-sync` — 이 작업을 PR #7로 main 반영(merge→로컬 동기화).
+- `040-git-pr7-merged` / `041-git-local-sync` — 이 작업을 PR로 main에 반영(merge→로컬 동기화).
 
 ### 4. 상태 전이·worker 운영 문서
 
@@ -686,7 +686,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **자료**
 
-- `042-git-pr8-open` / `043-git-pr8-merged` / `044-git-local-sync` — 이 작업을 PR #8로 main 반영(생성→merge→로컬 동기화).
+- `042-git-pr8-open` / `043-git-pr8-merged` / `044-git-local-sync` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화).
 
 ---
 
@@ -726,7 +726,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `045-obs-health-live-20260615.png` — 브라우저 `/health/live` 200 `{"status":"ok"}` + 터미널 `GET /health/live 200`.
 - `046-obs-health-ready-20260615.png` — 브라우저 `/health/ready` 200 `{"ready":true,"checks":{"db":{"ok":true,"ms":1005}}}` + 터미널 readiness 구조화 로그.
-- `047-git-pr9-open` / `048-git-pr9-merged` / `049-git-local-sync` — 이 작업을 PR #9로 main 반영(생성→merge→로컬 동기화).
+- `047-git-pr9-open` / `048-git-pr9-merged` / `049-git-local-sync` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화).
 
 **비고**
 
@@ -763,7 +763,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **자료**
 
-- `050-git-pr10-open` / `051-git-pr10-merged` / `052-git-local-sync` — 이 작업을 PR #10으로 main 반영(생성→merge→로컬 동기화).
+- `050-git-pr10-open` / `051-git-pr10-merged` / `052-git-local-sync` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화).
 
 ### 3. 외부 호출 timeout/retry 견고화 + 단위 테스트
 
@@ -798,3 +798,25 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - `053-test-resilience-pass-20260615.png` — `npm test`(node:test) 실행 결과. `withTimeout`·`withRetry` **4 케이스 전부 통과**(tests 4 / pass 4 / fail 0). 의미: timeout/retry 같은 순수 로직을 **결정적 자동 테스트로 고정** = 수동 재현·스샷에 의존하지 않고 회귀를 막는다. 이 출력이 곧 추후 CI 게이트(lint·build·test)의 `test` 단계가 통과하는 모습이다.
+- `054-git-pr11-open` / `055-git-pr11-merged` / `056-git-local-sync` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화).
+
+### 4. 운영 runbook 초안
+
+**이전 상태 / 문제**
+
+- 지금까지 운영 지식(상태 전이·재시도·키 잘림 함정·stuck job 등)이 **worklog와 코드에 흩어져** 있어, "이상하면 어디 보고 뭘 하나"를 한곳에서 볼 수 없었다.
+- → 장애·복구·재처리 절차를 **한 문서(runbook)** 로 모아 운영·인수인계의 기준을 만든다.
+
+**목적**
+
+- worker.md가 "어떻게 동작하나"라면, runbook은 **"문제 생기면 무엇을 하나"** 다. 새벽에 알림이 와도 이 문서만 보면 조회·재처리·롤백을 할 수 있게 — 운영을 *사람 머릿속*이 아니라 *문서*에 둔다.
+
+**한 일**
+
+- `docs/runbooks/runbook.md` 작성: 구성/신호, **health·probe 의미와 대응**, 서비스 재시작, graceful shutdown, 롤백, **stuck/failed job 조회·재처리·회수 SQL**, 흔한 incident 대응(Storage 다운·큐 적체·service_role 키 잘림·readiness 503), 관측 지점, 참고 문서.
+- 그동안 검증하며 만난 **운영 함정**(키 잘림 → `Invalid API key` 폴링 지속, download 행 등)을 incident 항목으로 정식 기록.
+- `README.md` 인덱스에 runbook 추가.
+
+**비고**
+
+- 지금 쓸 수 있는 **수동 절차** + k3s/ArgoCD/Grafana 단계에서 **자동화될 지점([추후])** 을 함께 표기. 코드(worker·health)와 1:1로 일치.
