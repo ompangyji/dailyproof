@@ -683,3 +683,50 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **비고**
 
 - 코드(`worker/worker.mjs`)와 1:1로 일치하게 작성. 후속(stuck 회수·썸네일·공통 로거·k3s 배포)은 문서에 "후속"으로 명시.
+
+**자료**
+
+- `042-git-pr8-open` / `043-git-pr8-merged` / `044-git-local-sync` — 이 작업을 PR #8로 main 반영(생성→merge→로컬 동기화).
+
+---
+
+## 2026-06-15
+
+### 1. health check 엔드포인트 (/health/live, /health/ready)
+
+**이전 상태 / 문제**
+
+- 오케스트레이터(k3s)나 로드밸런서가 이 앱이 **살아있는지·트래픽을 받을 준비됐는지** 물어볼 창구가 없었다. 죽었거나 준비 안 된 인스턴스에도 트래픽이 갈 수 있다.
+- → liveness/readiness probe 엔드포인트를 두어 "살아있나"와 "준비됐나"를 **분리해** 노출한다.
+
+**목적**
+
+- 오케스트레이터가 **인스턴스 상태를 스스로 판단**하게 만드는 일. liveness 실패=재시작, readiness 실패=트래픽 제외 — 자동 복구·무중단 배포의 전제다(사람이 안 봐도 시스템이 알아서 빼고/되살림).
+
+**한 일**
+
+- `src/app/health/live/route.ts`: liveness. 의존성 없이 200 `{status:"ok"}` — "프로세스가 떠 있나"만 본다.
+- `src/app/health/ready/route.ts`: readiness. Supabase 도달을 가벼운 조회로 점검 → 준비됐으면 200, 아니면 503. 본문에 `checks.db {ok, ms, error?}` 노출(다음 단계에서 timeout/retry로 확장).
+- `src/middleware.ts`: matcher에서 `health` 제외 → **liveness가 미들웨어의 Supabase 세션 조회에 의존하지 않게** 하고, `/login` 리다이렉트도 막음(공개 경로).
+
+**핵심 설계**
+
+- **live ≠ ready**: liveness는 의존성 0(살아있음만), readiness는 의존성 점검(준비됨). 섞으면 DB가 잠깐 느릴 때 liveness가 실패해 **불필요한 재시작**이 일어난다.
+- readiness 503 본문이 **어떤 체크가 왜 실패했는지** 말하게 해 디버깅·관측에 쓰이게 함.
+
+**검증 (실제 동작 확인)**
+
+- 로컬 `npm run dev` → 브라우저로 두 엔드포인트 확인:
+  - `/health/live` → **200** `{"status":"ok"}` (의존성 없이 즉시).
+  - `/health/ready` → **200** `{"ready":true,"checks":{"db":{"ok":true,"ms":1005}}}` — readiness가 Supabase 도달을 실제로 점검(`ms`=소요시간)하고 통과.
+- readiness는 구조화 로그도 남김: `{"msg":"readiness check","request_id":"…","route":"/health/ready","ready":true,"checks":{…}}` (health는 미들웨어 제외라 `request_id`는 라우트에서 자체 생성).
+- 타입체크(`tsc`) 통과.
+
+**자료**
+
+- `045-obs-health-live-20260615.png` — 브라우저 `/health/live` 200 `{"status":"ok"}` + 터미널 `GET /health/live 200`.
+- `046-obs-health-ready-20260615.png` — 브라우저 `/health/ready` 200 `{"ready":true,"checks":{"db":{"ok":true,"ms":1005}}}` + 터미널 readiness 구조화 로그.
+
+**비고**
+
+- live ≠ ready 분리 유지. ready의 `checks.db`는 다음 단계에서 timeout/retry 래퍼로 감싸 `attempts`·timeout까지 노출 예정(의존성 끊으면 503).
