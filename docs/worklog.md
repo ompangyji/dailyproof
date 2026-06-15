@@ -984,3 +984,29 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - `071-obs-metrics-latency-20260615.png` — `/metrics`에 `dailyproof_job_processing_seconds_avg 1.678` 노출. claim→done 기준이라 큐 대기를 제외한 실제 처리 시간이 수치로 보임.
+
+### 10. 메트릭 목록 문서 (metrics)
+
+**이전 상태 / 문제**
+
+- 메트릭을 코드(`route.ts`/`schema.sql`)에만 두니, 어떤 지표가 무슨 뜻이고 `pending`이 왜 큐 깊이인지, `*_total`이 counter가 아니라 게이지인지 등이 코드를 읽어야만 드러났다. 수집·알림·대시보드를 붙일 때 매번 코드를 역추적해야 하는 상태.
+
+**목적**
+
+- **메트릭을 "사전"으로 명문화**. 메뉴판처럼 "이름·라벨·의미·출처"를 한 표로 모아, 수집기/대시보드 담당이 코드 없이도 무엇을 어떻게 질의하는지 알게 한다. PromQL 예시·알림 후보·scrape 후속까지 한 곳에 둬 관측 작업의 진입점으로 삼는다.
+
+**한 일**
+
+- `docs/architecture/metrics.md` 신설 — ①메트릭 사전(3종, gauge), ②PromQL 질의 예시(큐 깊이·실패 비중·처리 시간), ③알림 후보 표, ④scrape config 예시·Grafana·로그와의 관계.
+- `docs/README.md` 문서 인덱스에 추가.
+
+**핵심 설계**
+
+- 코드 기준으로 정확히 기술: `dailyproof_jobs_total`/`dailyproof_assets_total`은 상태별 스냅샷 게이지(`pending`=큐 깊이), `dailyproof_job_processing_seconds_avg`는 claim→done 평균.
+- `*_total`이 관례상 counter지만 여기선 게이지임을 명시하고, 정식 counter·histogram 분리를 [추후]로 표시 — 비율(rate)·증가량(increase) 알림의 선결 과제임을 적음.
+- 메트릭(집계, "얼마나/빠른가")과 로그(`trace_id`로 개별 추적, "이 건이 어떻게")의 역할 구분과 연결 동선을 명시.
+
+**비고 / 검증 방법**
+
+- 문서 작업이라 런타임 검증 없음. 검증 = 문서의 메트릭 이름·라벨·집계식이 `src/app/metrics/route.ts`·`supabase/schema.sql` 현재 코드와 일치하는지 대조(일치 확인).
+- scrape·Grafana·알림 rule의 실제 동작은 [추후] k3s에서 검증.
