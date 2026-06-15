@@ -913,3 +913,43 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **비고**
 
 - 코드(공통 로거·worker·health)가 실제 찍는 로그와 1:1로 맞춤. 수집·대시보드(Loki/Grafana)·분산 트레이싱(OTel)은 [추후].
+
+**자료**
+
+- `066-git-pr15-open` / `067-git-pr15-merged` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화).
+
+### 8. /metrics 엔드포인트 + 큐/상태 게이지
+
+**이전 상태 / 문제**
+
+- 로그로 "무슨 일이 있었나"는 보이지만, **"지금 큐가 얼마나 쌓였나·실패가 몇 건인가" 같은 수치(메트릭)** 가 없었다. 상태를 수치로 못 보면 대시보드·알림·스케일 판단의 입력이 없다.
+- → Prometheus가 긁어갈 `/metrics`에 상태별 카운트를 노출한다.
+
+**목적**
+
+- **상태를 수치화**하는 일. `queue_depth`(큐 적체)·실패 건수 같은 게이지가 있어야 대시보드·알림·HPA(큐 적체 기반 스케일)가 그 위에서 동작한다. 로그(개별 사건)에 이어 메트릭(집계 수치)을 더하는 단계.
+
+**한 일**
+
+- `supabase/schema.sql`: `metrics_snapshot()` SECURITY DEFINER 함수 — jobs/proof_assets **상태별 전역 카운트**를 jsonb로 반환(집계만, 원본 행 비노출), anon grant.
+- `src/app/metrics/route.ts`: Prometheus 텍스트 포맷으로 `dailyproof_jobs_total{status}`(pending=queue_depth), `dailyproof_assets_total{status}`(failed=실패) 노출. anon으로 함수 호출.
+- `src/middleware.ts`: matcher에서 `metrics` 제외(인증 없이 scrape 가능).
+
+**핵심 설계**
+
+- 전역 카운트는 RLS 우회가 필요한데 — **service_role 키를 web에 넣는 대신** 집계만 반환하는 **SECURITY DEFINER 함수**를 anon이 호출(`get_grass`와 동일 패턴). 원본 행은 노출되지 않는다.
+- 모든 status를 **0 포함 항상 출력** → Prometheus 시계열이 안정적(없다고 사라지지 않음).
+
+**비고 / 검증 방법**
+
+- 적용: Supabase SQL Editor에서 `schema.sql` 재실행(`metrics_snapshot` 함수).
+- 처리 지연(latency)은 다음 단계. 운영에선 `/metrics` 내부망 제한 [추후].
+
+**검증 (실제 동작 확인)**
+
+- `localhost:3000/metrics` → Prometheus 텍스트로 게이지 노출 확인: `dailyproof_jobs_total{status="done"} 4`, `{status="failed"} 1`, `{status="pending"} 0`(=queue_depth), `dailyproof_assets_total{status="ready"} 4`, `{status="failed"} 1`. 모든 status가 0 포함 출력됨.
+- 값이 그간 데이터와 일치(처리 완료 4, 실패 1=download_failed 테스트분, 큐 비어 pending 0). `tsc`·`npm test`(6/6) 통과.
+
+**자료**
+
+- `068-obs-metrics-endpoint-20260615.png` — `/metrics` 응답(Prometheus 텍스트). jobs/assets 상태별 게이지가 의도대로 노출되고 값이 실제 데이터와 일치.

@@ -483,3 +483,27 @@ drop trigger if exists proof_assets_enqueue on public.proof_assets;
 create trigger proof_assets_enqueue
   after insert on public.proof_assets
   for each row execute function public.enqueue_proof_job();
+
+-- 메트릭 스냅샷: jobs/proof_assets의 상태별 전역 카운트(집계만 반환, 원본 행 비노출).
+-- /metrics 가 anon으로 호출하므로 SECURITY DEFINER로 RLS를 우회한다(get_grass와 동일 패턴).
+create or replace function public.metrics_snapshot()
+returns jsonb
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select jsonb_build_object(
+    'jobs', (
+      select coalesce(jsonb_object_agg(status, c), '{}'::jsonb)
+      from (select status, count(*)::int c from public.jobs group by status) j
+    ),
+    'assets', (
+      select coalesce(jsonb_object_agg(status, c), '{}'::jsonb)
+      from (select status, count(*)::int c from public.proof_assets group by status) a
+    )
+  );
+$$;
+
+-- /metrics(anon)에서 호출. 집계만 노출하므로 anon 허용.
+grant execute on function public.metrics_snapshot() to anon, authenticated;
