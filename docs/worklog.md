@@ -953,3 +953,34 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - `068-obs-metrics-endpoint-20260615.png` — `/metrics` 응답(Prometheus 텍스트). jobs/assets 상태별 게이지가 의도대로 노출되고 값이 실제 데이터와 일치.
+- `069-git-pr16-open` / `070-git-pr16-merged` — 이 작업을 PR로 main에 반영(생성→merge→로컬 동기화).
+
+### 9. 처리 지연(latency) 지표
+
+**이전 상태 / 문제**
+
+- `/metrics`에 큐·상태 카운트는 있지만 **"처리에 얼마나 걸리나"(지연)** 는 없었다. 지연이 안 보이면 성능 저하를 **수치로 감지·알림**할 수 없다.
+- → worker의 **처리 시간**을 근사 게이지로 노출한다.
+
+**목적**
+
+- **성능을 수치화**. queue_depth가 "얼마나 밀렸나"라면 처리 시간은 "worker가 한 건에 얼마나 걸리나" — SLO·알림·성능 회귀 감지의 입력.
+
+**한 일**
+
+- `supabase/schema.sql`: `metrics_snapshot()`에 `job_processing_seconds_avg` 추가 — 최근 done job 100건의 **`(updated_at - locked_at)`**(claim→done) 평균 초.
+- `src/app/metrics/route.ts`: `dailyproof_job_processing_seconds_avg` 게이지 노출.
+
+**핵심 설계**
+
+- 처음엔 `created_at→updated_at`(enqueue→done)으로 쟀더니, dev에서 worker를 띄엄띄엄 돌려 **큐 대기가 수 시간** 섞이며 평균이 ~22997초로 폭발 → "처리 지연"으로 부적절. **`locked_at`(claim)→`updated_at`(done)** 으로 바꿔 **큐 대기를 제외한 순수 처리 시간**(~수 초)을 재게 함.
+- 의존성 없이 DB 타임스탬프 기반 근사. 정식 Prometheus **histogram**(분위수, prom-client + worker 계측)은 [추후].
+
+**비고 / 검증 방법**
+
+- 적용: `schema.sql` 재실행(`metrics_snapshot` 갱신).
+- 적용 후 검증: `/metrics` → **`dailyproof_job_processing_seconds_avg 1.678`** (claim→done 순수 처리 시간, worker 로그의 ~2초와 일치). enqueue→done이던 초기 버전의 22997초(큐 대기 섞임)와 대비됨. `tsc`·`npm test` 통과.
+
+**자료**
+
+- `071-obs-metrics-latency-20260615.png` — `/metrics`에 `dailyproof_job_processing_seconds_avg 1.678` 노출. claim→done 기준이라 큐 대기를 제외한 실제 처리 시간이 수치로 보임.
