@@ -1164,3 +1164,28 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `089-deploy-compose-up-20260616.png` — web·worker·jaeger 컨테이너 생성 + jaeger OTLP receiver 기동.
 - `090-deploy-compose-running-20260616.png` — web `:3000` 기동·worker `worker 시작`(env=production)·업로드 시 `/api/proof-assets "asset 등록"` 로그.
 - `087-trace-compose-web-worker-20260616.png` — Jaeger에서 컨테이너 스택의 `POST .../api/proof-assets/route`가 web(6)+worker(3) 9 spans로 한 trace에 묶임(컨테이너 간 전파 동작).
+
+### 6. smoke test + local stack 문서
+
+**이전 상태 / 문제**
+
+- 스택은 뜨지만, "잘 떴는지"를 매번 브라우저로 web·Jaeger를 눌러보고 메트릭을 눈으로 확인했다. 자동 점검이 없어 CI 게이트로 쓸 수 없고, 구동 절차·포트·흔한 걸림돌이 머릿속/대화에만 있어 재현이 사람 의존적이었다.
+
+**목적**
+
+- **"떴는지"를 한 명령으로 판정 + 절차를 문서로 고정**. smoke 스크립트로 헬스·메트릭·관측 백엔드 도달을 pass/fail로 찍고, local-stack 문서로 누구나 같은 절차로 띄우고 막히면 표에서 찾게 한다.
+
+**한 일**
+
+- `scripts/smoke.mjs` + `npm run smoke` — 의존성 없이 `/health/live`·`/health/ready`·`/metrics`(게이지 노출)·Jaeger UI 도달을 점검, 실패 시 비-0 종료(CI 게이트 가능). 대상·타임아웃은 env로 조정.
+- `docs/runbooks/local-stack.md` — 구성·포트표, 실행(`docker compose --env-file .env.local up --build`), smoke 사용법, 트러블슈팅 표(포트 충돌·env 누락·trace 지연·drvfs 빌드), 종료, 후속(jaeger 태그 고정/v2·관측 스택 통합).
+- `docs/README.md` 인덱스 추가.
+
+**핵심 설계**
+
+- 업로드→worker→trace는 로그인 사용자가 필요해 **자동 smoke에서 제외**하고 그 양 끝(web 헬스/메트릭, jaeger 도달)만 본다 — 자동화 가능한 범위를 정직하게 한정하고, 전체 경로는 수동 절차로 문서화.
+- jaeger `:latest`(v1 EOL 경고)는 검증된 구성을 깨지 않으려 그대로 두고, **태그 고정/v2 전환을 문서의 후속으로 명시**.
+
+**비고 / 검증 방법**
+
+- 실측: 떠 있는 컨테이너 스택 대상으로 `npm run smoke` → **4개 체크 전부 PASS, exit 0** (`/metrics`의 `dailyproof_jobs_total`·`dailyproof_job_processing_seconds_avg` 노출 포함 확인).
