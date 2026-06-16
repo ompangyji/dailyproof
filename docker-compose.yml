@@ -1,0 +1,56 @@
+# 로컬 관측 스택: web · worker · jaeger 를 한 번에 띄운다.
+#
+# 실행:  docker compose --env-file .env.local up --build
+#   - --env-file .env.local : compose 변수 치환(빌드 arg)과 컨테이너 주입에 .env.local 사용.
+#     .env.local 에는 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY /
+#     SUPABASE_SERVICE_ROLE_KEY 가 있어야 한다(시크릿, git 미추적).
+#   - 접속:  web http://localhost:3000   ·   Jaeger UI http://localhost:16686
+#
+# 수동으로 띄우던 jaeger(docker run ...)를 이 스택이 대체한다.
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true      # OTLP 수신 활성화(4318/HTTP, 4317/gRPC)
+    ports:
+      - "16686:16686"                    # Jaeger UI
+      - "4318:4318"                      # OTLP/HTTP (web·worker가 여기로 export)
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # NEXT_PUBLIC_* 는 빌드 시 클라이언트 번들에 인라인(공개값). compose 변수 치환으로 주입.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    env_file:
+      - .env.local                       # 런타임 env(서버 측). 시크릿 포함, 이미지엔 안 들어감.
+    environment:
+      # 컨테이너 네트워크에선 localhost가 아니라 서비스명으로 jaeger에 닿는다(.env.local 값 덮어씀).
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=dailyproof-web
+    ports:
+      - "3000:3000"
+    depends_on:
+      - jaeger
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file:
+      - .env.local                       # SUPABASE_SERVICE_ROLE_KEY 등 런타임 시크릿.
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+    depends_on:
+      - jaeger
+    restart: unless-stopped
