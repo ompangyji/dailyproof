@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-web
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels:
+      {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "web") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "web") | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: web
+          image: "{{ .Values.image.web.repository }}:{{ .Values.image.web.tag }}"
+          imagePullPolicy: {{ .Values.image.web.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.web.containerPort }}
+          # 기존 헬스 엔드포인트를 k8s probe로 그대로 사용.
+          # liveness=살아있나(/health/live), readiness=트래픽 받을 준비(/health/ready: 의존성 점검).
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # 비밀 아닌 설정(추후 ConfigMap/Secret으로 분리).
+          env:
+            {{- range $k, $v := .Values.config }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            - name: OTEL_SERVICE_NAME
+              value: dailyproof-web

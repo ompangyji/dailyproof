@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-worker
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "worker") | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: worker
+          image: "{{ .Values.image.worker.repository }}:{{ .Values.image.worker.tag }}"
+          imagePullPolicy: {{ .Values.image.worker.pullPolicy }}
+          # worker는 HTTP를 안 열어 httpGet probe 대상이 없다. 프로세스가 떠 있으면 살아있는 것으로 보고,
+          # 정밀 liveness(폴링 동작 확인)는 추후 메트릭/파일 기반 exec probe로 보강한다.
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            {{- range $k, $v := .Values.config }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: dailyproof
+description: DailyProof web + worker 워크로드 (k8s/k3s 배포용 Helm 차트)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
