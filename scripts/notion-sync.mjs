@@ -187,6 +187,42 @@ function mdToBlocks(md) {
 
 // ---------------------------------------------------------------- notion io
 const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, k) => arr.slice(k * n, k * n + n));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Notion 호출 재시도: 일시적 오류(요청 타임아웃·rate limit·5xx)에 지수 백오프.
+// 거대 문서(worklog 등)는 호출 수가 많아 한 번씩 타임아웃이 나는데, 죽이지 않고 재시도한다.
+async function withRetry(fn, label, attempts = 4) {
+  for (let a = 0; ; a++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const code = err?.code ?? "";
+      const status = err?.status ?? 0;
+      const retriable =
+        code === "notionhq_client_request_timeout" ||
+        code === "rate_limited" || status === 429 ||
+        (status >= 500 && status < 600);
+      if (!retriable || a >= attempts - 1) throw err;
+      const delay = 1000 * 2 ** a; // 1s, 2s, 4s
+      console.warn(`retry ${label} (${a + 1}/${attempts}) — ${code || status}, ${delay}ms 후 재시도`);
+      await sleep(delay);
+    }
+  }
+}
+
+// 동시성 제한 병렬 실행(결과 순서 보존). 순차 수백 회 왕복으로 인한 지연·타임아웃을 줄인다.
+async function mapPool(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
 
 // 부모 페이지별 child_page(title -> id) 목록을 캐시. 폴더 미러링에 사용.
 const childCache = new Map();
@@ -195,7 +231,10 @@ async function getChildren(notion, parentId) {
   const map = new Map();
   let cursor;
   do {
-    const res = await notion.blocks.children.list({ block_id: parentId, start_cursor: cursor, page_size: 100 });
+    const res = await withRetry(
+      () => notion.blocks.children.list({ block_id: parentId, start_cursor: cursor, page_size: 100 }),
+      "list-children",
+    );
     for (const b of res.results) {
       if (b.type === "child_page") map.set(b.child_page.title, b.id);
     }
@@ -209,26 +248,34 @@ async function getChildren(notion, parentId) {
 async function ensureFolder(notion, parentId, name) {
   const kids = await getChildren(notion, parentId);
   if (kids.has(name)) return kids.get(name);
-  const page = await notion.pages.create({
+  const page = await withRetry(() => notion.pages.create({
     parent: { page_id: parentId },
     properties: { title: { title: [{ text: { content: name } }] } },
-  });
+  }), "create-folder");
   kids.set(name, page.id);
   return page.id;
 }
 
 async function clearPage(notion, pageId) {
+  // 기존 블록 id를 모두 수집(페이지네이션)한 뒤 동시성 제한 병렬로 삭제한다.
+  // 블록당 1회 순차 삭제는 거대 문서(worklog 등)에서 수백 회 왕복 → 타임아웃을 유발했다.
+  const ids = [];
   let cursor;
   do {
-    const res = await notion.blocks.children.list({ block_id: pageId, start_cursor: cursor, page_size: 100 });
-    for (const b of res.results) await notion.blocks.delete({ block_id: b.id });
+    const res = await withRetry(
+      () => notion.blocks.children.list({ block_id: pageId, start_cursor: cursor, page_size: 100 }),
+      "list-blocks",
+    );
+    for (const b of res.results) ids.push(b.id);
     cursor = res.has_more ? res.next_cursor : undefined;
   } while (cursor);
+  await mapPool(ids, 8, (id) => withRetry(() => notion.blocks.delete({ block_id: id }), "delete"));
 }
 
 async function appendAll(notion, pageId, blocks) {
+  // append는 순서가 의미 있어 순차 유지(재시도만 추가).
   for (const part of chunk(blocks, 100)) {
-    await notion.blocks.children.append({ block_id: pageId, children: part });
+    await withRetry(() => notion.blocks.children.append({ block_id: pageId, children: part }), "append");
   }
 }
 
@@ -241,11 +288,11 @@ async function ensureDocPage(notion, parentId, title, blocks) {
     await appendAll(notion, pageId, blocks);
     return "updated";
   }
-  const page = await notion.pages.create({
+  const page = await withRetry(() => notion.pages.create({
     parent: { page_id: parentId },
     properties: { title: { title: [{ text: { content: title } }] } },
     children: blocks.slice(0, 100),
-  });
+  }), "create-doc");
   kids.set(title, page.id);
   if (blocks.length > 100) await appendAll(notion, page.id, blocks.slice(100));
   return "created";
@@ -279,7 +326,8 @@ async function main() {
     console.log("NOTION_TOKEN / NOTION_PARENT_PAGE_ID 미설정 — sync 스킵.");
     return;
   }
-  const notion = new Client({ auth: TOKEN });
+  // timeoutMs 상향: 거대 문서는 호출이 잦아 기본 60s에 걸리기 쉽다(+withRetry로 재시도).
+  const notion = new Client({ auth: TOKEN, timeoutMs: 120000 });
 
   const args = process.argv.slice(2).filter((a) => a.endsWith(".md") && a.replace(/\\/g, "/").startsWith("docs/"));
   const files = args.length ? args : await walkDocs(DOCS_DIR);
