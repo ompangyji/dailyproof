@@ -1121,10 +1121,46 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **핵심 설계**
 
 - web은 `standalone`이라 런타임 이미지에 전체 `node_modules`가 아니라 추적된 최소 의존성만 들어간다. OTel은 `@vercel/otel`이 instrumentation 번들에 인라인되고 싱글톤 `@opentelemetry/api`만 external로 추적돼 standalone에 포함 — 별도 처리 불필요.
-- worker는 web과 **별도 이미지**(독립 프로세스·다른 의존성 집합). 둘 다 비루트 유저로 실행.
+- worker는 web과 **별도 이미지**(독립 프로세스·다른 의존성 집합).
 
 **비고 / 검증 방법**
 
 - `npm run build`가 drvfs(윈도우 마운트)에서 `EPERM copyfile`(`_not-found.html`→`pages/404.html`)로 중단되는 건 **WSL drvfs 전용 현상** — 리눅스 fs(컨테이너 빌드)에선 안 난다. 이를 확인하려고 **WSL 네이티브 경로로 소스를 옮겨 빌드 → 성공(exit 0)**, `.next/standalone/server.js`·`node_modules`·`.next/static` 생성과 `/api/proof-assets`·`/metrics`·`/health/*` 라우트 포함 확인.
 - standalone의 외부 의존성 추적 검증: 컴파일된 `instrumentation.js`는 외부로 Node 내장(module/path/url)만 require하고 `@vercel/otel`은 번들 인라인, `@opentelemetry/api`는 standalone `node_modules`에 존재 → web 컨테이너 부팅에 빠진 모듈 없음.
 - 실제 `docker build`·컨테이너 기동은 Docker가 있는 환경에서 수행(다음 단계 compose에서 일괄). 빌드 예: `docker build -f Dockerfile.web --build-arg NEXT_PUBLIC_SUPABASE_URL=… --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=… -t dailyproof-web .`
+
+### 5. docker-compose 스택 (web·worker·jaeger)
+
+**이전 상태 / 문제**
+
+- 이미지는 생겼지만 여전히 web·worker·jaeger를 **각각 손으로** 띄워야 했다(`docker run` 3번, env·포트·네트워크를 매번 맞춤). "관측 가능한 스택 통째로 기동"이 한 명령으로 재현되지 않았다.
+
+**목적**
+
+- **스택을 한 명령으로 묶기**. `docker compose up` 하나로 web·worker·jaeger가 같은 네트워크에서 뜨고 서로 이름으로 닿게 한다. 수동 `docker run jaeger`를 흡수.
+
+**한 일**
+
+- `docker-compose.yml` 작성 — jaeger(UI 16686 / OTLP 4318), web(`Dockerfile.web` 빌드, 3000 노출), worker(`Dockerfile.worker` 빌드) 3개 서비스.
+- **OTLP 라우팅**: 컨테이너 네트워크에선 localhost가 아니라 서비스명으로 닿으므로, web·worker의 `OTEL_EXPORTER_OTLP_ENDPOINT`를 `http://jaeger:4318`로 덮어씀.
+- **env 주입**: `env_file: .env.local`로 런타임 시크릿(서비스롤 등)을 컨테이너에 주입하고, 빌드 시 인라인되는 `NEXT_PUBLIC_*`는 compose 변수 치환(`--env-file .env.local`)으로 build arg에 전달.
+- web에 `wget` 기반 `/health/live` healthcheck + `restart: unless-stopped`.
+- `.env.example`에 docker 시 endpoint가 `jaeger:4318`로 바뀜을 메모.
+
+**핵심 설계**
+
+- 시크릿은 **이미지가 아니라 런타임(env_file)** 으로만 들어간다(`.dockerignore`가 `.env*` 차단 + 빌드엔 공개값만).
+- 실행은 `docker compose --env-file .env.local up --build` 한 줄 — 변수 치환과 컨테이너 주입을 같은 파일로 통일.
+
+**비고 / 검증 방법**
+
+- 구문 검증: 시크릿 노출 없이 더미 env로 치환해 `docker compose config -q` → **exit 0**(구조 유효).
+- 실측: `docker compose --env-file .env.local up --build` → **빌드 32/32 성공**, 컨테이너 3개(web `:3000`·worker `env=production`·jaeger) 기동. 업로드 1건 시 web 로그에 `/api/proof-assets "asset 등록"`, Jaeger에 **`POST .../api/proof-assets/route` = `dailyproof-web (6)`+`dailyproof-worker (3)` 9 spans**로 **별개 컨테이너의 web→worker가 `jaeger:4318`로 한 trace에 묶임** 확인.
+- 참고: jaeger v1 EOL deprecation 경고(동작 무관). 이미지 태그 고정/v2 전환은 후속.
+
+**자료**
+
+- `088-deploy-compose-build-20260616.png` — `docker compose ... up --build`가 web·worker 이미지를 `Building 184.1s (32/32) FINISHED`로 빌드.
+- `089-deploy-compose-up-20260616.png` — web·worker·jaeger 컨테이너 생성 + jaeger OTLP receiver 기동.
+- `090-deploy-compose-running-20260616.png` — web `:3000` 기동·worker `worker 시작`(env=production)·업로드 시 `/api/proof-assets "asset 등록"` 로그.
+- `087-trace-compose-web-worker-20260616.png` — Jaeger에서 컨테이너 스택의 `POST .../api/proof-assets/route`가 web(6)+worker(3) 9 spans로 한 trace에 묶임(컨테이너 간 전파 동작).
