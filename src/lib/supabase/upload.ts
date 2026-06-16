@@ -37,24 +37,25 @@ export async function uploadImage(file: File, kind: UploadKind): Promise<string>
     });
   if (upErr) throw new Error(upErr.message);
 
-  // Register the asset for async post-processing. A DB trigger
-  // (proof_assets_enqueue) enqueues a `jobs` row for the worker.
-  // Metadata we know up front; width/height/checksum/thumb are filled later.
-  // 업로드마다 추적 id 부여 → asset에 저장 → worker가 그 id로 로그(web→worker 상관).
-  const traceId = crypto.randomUUID();
-  const { error: assetErr } = await supabase.from("proof_assets").insert({
-    user_id: user.id,
-    source_path: path,
-    trace_id: traceId,
-    kind,
-    status: "uploaded",
-    content_type: file.type,
-    size_bytes: file.size,
+  // Register the asset for async post-processing via a server route. A DB trigger
+  // (proof_assets_enqueue) then enqueues a `jobs` row for the worker.
+  // 등록을 서버 경유로 두는 이유: 서버 라우트가 OTel span으로 감싸지므로 그 컨텍스트(traceparent)를
+  // asset row에 심어 worker까지 한 trace로 잇기 위함. (파일 업로드 자체는 위처럼 브라우저 직행 유지.)
+  const res = await fetch("/api/proof-assets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      source_path: path,
+      kind,
+      content_type: file.type,
+      size_bytes: file.size,
+    }),
   });
-  if (assetErr) {
+  if (!res.ok) {
     // Don't leave an orphaned storage object if we couldn't record the asset.
     await supabase.storage.from("media").remove([path]).catch(() => {});
-    throw new Error(`Failed to register upload: ${assetErr.message}`);
+    const msg = await res.text().catch(() => "");
+    throw new Error(`Failed to register upload: ${res.status} ${msg}`);
   }
 
   // Bucket is private; reference the file through the authenticated proxy.

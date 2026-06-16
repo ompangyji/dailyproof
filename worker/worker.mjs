@@ -16,11 +16,15 @@
  *   실패 시 지수 백오프 재시도(attempts/max_attempts·run_after), 초과 시 failed+error_code.
  *   썸네일·적극 중복차단은 후속.
  */
+import { shutdownTracing } from "./tracing.mjs"; // 최상단: 다른 작업 전에 OTel SDK 시작
+import { trace, context, propagation, SpanStatusCode, SpanKind } from "@opentelemetry/api";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID, createHash } from "node:crypto";
 import { hostname } from "node:os";
 import { withTimeout } from "../lib/resilience.mjs";
 import { createLogger } from "../lib/log.mjs";
+
+const tracer = trace.getTracer("dailyproof-worker");
 
 const URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -69,39 +73,78 @@ function imageDimensions(buf) {
  * uploaded→processing(시작)→ready(완료). 실패 시 throw → 루프에서 로그(재시도는 후속).
  */
 async function processJob(job) {
-  // 자산을 먼저 조회(trace_id 포함) → 모든 job 로그에 업로드 때 부여된 trace_id를 붙여
-  // web→worker 흐름을 같은 id로 상관시킨다.
+  // 자산을 먼저 조회(trace_id·traceparent 포함). trace_id는 로그 상관용(유지),
+  // traceparent는 web이 심어둔 W3C 부모 컨텍스트 — worker span을 web의 자식으로 잇는다.
   const { data: asset, error: aErr } = await supabase
-    .from("proof_assets").select("id, source_path, trace_id").eq("id", job.asset_id).single();
+    .from("proof_assets").select("id, source_path, trace_id, traceparent").eq("id", job.asset_id).single();
   if (aErr || !asset) throw coded("asset_not_found", `asset 조회 실패: ${aErr?.message ?? "not found"}`);
 
   const jlog = log.with({ job_id: job.id, asset_id: job.asset_id, trace_id: asset.trace_id ?? null });
-  jlog.info("job 선점", { attempts: job.attempts, type: job.type });
 
-  // 처리 중 표시
-  await supabase.from("proof_assets").update({ status: "processing" }).eq("id", job.asset_id);
+  // 비동기 큐 경계를 넘는 span propagation: DB row의 traceparent를 부모 컨텍스트로 복원.
+  // → 이 worker span은 업로드를 시작한 web(server route) span의 자식으로 같은 trace에 묶인다.
+  const parentCtx = propagation.extract(context.active(), { traceparent: asset.traceparent ?? "" });
 
-  const { data: blob, error: dErr } = await withTimeout(
-    () => supabase.storage.from("media").download(asset.source_path),
-    CALL_TIMEOUT_MS, "download",
+  await tracer.startActiveSpan(
+    "worker process_image",
+    {
+      kind: SpanKind.CONSUMER,
+      attributes: { "job.id": job.id, "asset.id": job.asset_id, "job.attempts": job.attempts },
+    },
+    parentCtx,
+    async (span) => {
+      try {
+        jlog.info("job 선점", { attempts: job.attempts, type: job.type });
+        await supabase.from("proof_assets").update({ status: "processing" }).eq("id", job.asset_id);
+
+        // 원본 download (자식 span)
+        const { buf, contentType } = await tracer.startActiveSpan("storage.download", async (dl) => {
+          try {
+            const { data: blob, error: dErr } = await withTimeout(
+              () => supabase.storage.from("media").download(asset.source_path),
+              CALL_TIMEOUT_MS, "download",
+            );
+            if (dErr || !blob) throw coded("download_failed", `원본 download 실패: ${dErr?.message ?? "no data"}`);
+            const b = Buffer.from(await blob.arrayBuffer());
+            dl.setAttribute("download.bytes", b.length);
+            return { buf: b, contentType: blob.type || null };
+          } finally {
+            dl.end();
+          }
+        });
+
+        // 후처리(가볍게): sha256 체크섬·실제 크기·차원
+        const checksum = createHash("sha256").update(buf).digest("hex");
+        const { width, height } = imageDimensions(buf);
+
+        // 결과 반영 → ready (자식 span: DB 저장 구간)
+        await tracer.startActiveSpan("db.update proof_assets ready", async (db) => {
+          try {
+            const patch = { status: "ready", size_bytes: buf.length, width, height, checksum };
+            if (contentType) patch.content_type = contentType;
+            await supabase.from("proof_assets").update(patch).eq("id", job.asset_id);
+            await supabase.from("jobs").update({ status: "done" }).eq("id", job.id);
+          } finally {
+            db.end();
+          }
+        });
+
+        span.setAttribute("image.width", width ?? 0);
+        span.setAttribute("image.height", height ?? 0);
+        span.setStatus({ code: SpanStatusCode.OK });
+        jlog.info("job 완료", {
+          status: "ready", size_bytes: buf.length, width, height,
+          checksum: checksum.slice(0, 12) + "…",
+        });
+      } catch (e) {
+        span.recordException(e);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: e.message });
+        throw e; // 루프의 handleFailure로 (재시도/실패 확정)
+      } finally {
+        span.end();
+      }
+    },
   );
-  if (dErr || !blob) throw coded("download_failed", `원본 download 실패: ${dErr?.message ?? "no data"}`);
-
-  // 후처리(가볍게): sha256 체크섬·실제 크기·차원
-  const buf = Buffer.from(await blob.arrayBuffer());
-  const checksum = createHash("sha256").update(buf).digest("hex");
-  const { width, height } = imageDimensions(buf);
-
-  // 결과 반영 → ready
-  const patch = { status: "ready", size_bytes: buf.length, width, height, checksum };
-  if (blob.type) patch.content_type = blob.type;
-  await supabase.from("proof_assets").update(patch).eq("id", job.asset_id);
-  await supabase.from("jobs").update({ status: "done" }).eq("id", job.id);
-
-  jlog.info("job 완료", {
-    status: "ready", size_bytes: buf.length, width, height,
-    checksum: checksum.slice(0, 12) + "…",
-  });
 }
 
 /**
@@ -167,6 +210,7 @@ async function loop() {
       await handleFailure(job, e);
     }
   }
+  await shutdownTracing(); // 남은 span flush
   log.info("worker 종료 완료");
 }
 

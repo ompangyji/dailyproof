@@ -1038,3 +1038,32 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `tsc --noEmit` 통과. `next build` — **Compiled successfully + 타입 검증 통과 + static pages 9/9 생성**(끝의 `EPERM copyfile`은 OTel 무관, WSL drvfs의 `.next` 복사 권한 제약).
 - span이 실제 백엔드에 뜨는 화면은 worker 전파까지 들어간 뒤 **web→worker→DB 전체 트리로 한 번에** 캡처(후속). 단독 web span만 찍는 것보다 관계가 드러나 증거로 낫기 때문.
+
+### 2. worker 트레이싱 + web→worker→DB span 전파
+
+**이전 상태 / 문제**
+
+- web에만 SDK가 붙어 있어 worker는 trace 밖이었다. 게다가 업로드는 `"use client"` 코드라 **브라우저에서 직접** Storage·DB에 쓰고, 후처리는 큐(DB)를 거쳐 worker가 나중에 집어간다. 즉 ①worker에 span이 없고 ②업로드 시점에 부모로 삼을 **서버 span 자체가 없으며** ③web과 worker는 HTTP로 직접 안 이어져 표준 컨텍스트 전파(헤더)가 불가능했다.
+
+**목적**
+
+- **끊긴 두 프로세스를 한 trace로 잇기**. 택배로 치면 송장번호(=`trace_id`, 로그용)는 있었지만, "접수→상차→배송" 단계가 부모-자식으로 연결된 추적 화면이 없었다. web 요청에서 시작된 trace를 비동기 큐 경계 너머 worker까지 이어, 한 업로드가 어느 단계에서 얼마나 걸렸는지 트리로 보이게 한다.
+
+**한 일**
+
+- **부모 span 만들 지점 확보**: asset 등록을 브라우저 직접 insert → 새 서버 라우트 `POST /api/proof-assets` 경유로 변경. 이 라우트는 `@vercel/otel`이 span으로 감싸므로 여기서 trace가 시작된다. (파일 업로드 자체는 브라우저→Storage 직행 유지 — 8MB를 서버로 우회시키지 않음.)
+- **경계 전파**: 서버 라우트가 활성 span에서 **W3C `traceparent`** 를 만들어 `proof_assets.traceparent` 컬럼에 저장. worker가 job을 집을 때 그 값을 `propagation.extract`로 **부모 컨텍스트로 복원** → worker span이 web span의 자식이 됨.
+- **worker 계측**: `worker/tracing.mjs`(NodeSDK + OTLP/HTTP exporter, `service.name=dailyproof-worker`) 추가. `processJob`을 `worker process_image`(부모=web) span으로 감싸고, 그 아래 `storage.download`·`db.update proof_assets ready` 자식 span으로 구간을 나눔. 실패 시 span에 예외 기록.
+- 스키마에 `traceparent text` 컬럼(멱등 alter), 타입에 반영.
+
+**핵심 설계**
+
+- 브라우저는 OTel 계측 대상이 아니므로(서버만 계측), trace 시작점을 **서버 라우트로 끌어옴** — 이게 "web→worker"를 진짜 부모-자식으로 만들 수 있는 유일하게 깔끔한 지점.
+- 큐(DB)는 HTTP 헤더가 없으니, 컨텍스트를 **데이터(traceparent 컬럼)에 실어** 비동기 경계를 넘김 — 메시지큐 트레이싱의 표준 패턴.
+- 기존 `trace_id`(로그 상관)는 그대로 두고 `traceparent`(span 부모)를 **나란히** 둠 — 로그(개별 추적)와 trace(span 트리)는 역할이 달라 둘 다 유용.
+
+**비고 / 검증 방법**
+
+- `tsc` 통과. worker 구문(`node --check`) OK. `next build` — Compiled successfully + 타입·lint 검증 + static 9/9(끝 `EPERM`은 무관, drvfs `.next` 복사 제약).
+- **전파 스모크 테스트**: 가짜 `traceparent`(`00-0af7…319c-…-01`)를 `propagation.extract`로 복원해 worker span을 시작하니, child span의 trace-id가 **부모와 동일(`0af7…319c`)** 로 확인됨 → 비동기 경계 전파가 실제로 부모-자식을 잇는다.
+- 실제 Jaeger UI에서 web→worker→DB 트리가 한 trace로 묶이는 화면은 다음 단계에서 캡처.

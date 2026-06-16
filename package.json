@@ -19,6 +19,8 @@
     "@fullcalendar/timegrid": "^6.1.15",
     "@notionhq/client": "^5.22.0",
     "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.219.0",
+    "@opentelemetry/sdk-node": "^0.219.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.46.1",
     "@tiptap/extension-image": "^2.27.2",
