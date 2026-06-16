@@ -1,0 +1,23 @@
+# 빌드 컨텍스트에서 제외 (이미지 슬림화 + 시크릿 유출 방지)
+node_modules
+.next
+.git
+.gitignore
+
+# 시크릿 — 절대 이미지에 넣지 않는다
+.env
+.env.local
+.env.*.local
+
+# 산출물/문서/캡처 — 런타임에 불필요
+docs
+*.png
+favicon.zip
+README.md
+tsconfig.tsbuildinfo
+npm-debug.log*
+
+# Docker 메타 자체
+Dockerfile*
+.dockerignore
+docker-compose*.yml

@@ -110,7 +110,15 @@ select status, count(*) from jobs group by status;  -- queue_depth
 
 ---
 
-## 9. 참고 문서
+## 9. 로컬 빌드 주의 (WSL drvfs)
+
+- 윈도우 마운트 경로(`/mnt/d/...`, drvfs)에서 `npm run build`(프로덕션 빌드)는 마지막 단계의 `copyfile`(`_not-found.html`→`pages/404.html`)에서 **`EPERM`** 로 중단된다. drvfs 권한 제약(git chmod 막히는 것과 같은 계열)으로, **리눅스 fs에선 안 난다.**
+- 실제 영향 범위: **없음**. Docker 빌드(컨테이너 내부 리눅스 fs)·Vercel 배포·CI(리눅스 러너)·`npm run dev`·`npm test`는 모두 정상. 의미 있는 단계(컴파일·타입·lint·static)는 EPERM 이전에 끝나며, 동일 소스를 네이티브 fs에서 빌드하면 `exit 0`로 완주한다.
+- 그래서 **로컬 프로덕션 빌드/실행은 컨테이너로**(`docker build`/compose) 하거나, 굳이 직접 빌드해야 하면 **WSL 네이티브 경로(`~/...`)에서** 한다. drvfs에 남은 불완전한 `.next`는 git 미추적이라 무해하며 `rm -rf .next`로 정리하면 된다.
+
+---
+
+## 10. 참고 문서
 
 - `architecture/worker.md` — 상태 전이·동작 상세
 - `architecture/environments.md` — 환경·시크릿 주입

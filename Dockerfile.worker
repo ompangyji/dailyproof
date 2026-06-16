@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+# worker(독립 Node 프로세스) 런타임 이미지. web과 별도 컨테이너로 돈다.
+# 빌드 단계가 없으므로 프로덕션 의존성만 설치하고 worker/ + lib/ 만 담는다.
+
+# --- deps: 프로덕션 의존성만 ---
+FROM node:22-alpine AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# --- runner ---
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S worker -G nodejs
+COPY --from=deps --chown=worker:nodejs /app/node_modules ./node_modules
+COPY --chown=worker:nodejs worker ./worker
+COPY --chown=worker:nodejs lib ./lib
+COPY --chown=worker:nodejs package.json ./
+USER worker
+# 환경변수(SUPABASE_*, OTEL_*)는 컨테이너 런타임(compose env)에서 주입한다.
+# (로컬 npm 스크립트의 --env-file=.env.local 과 달리 여기선 파일을 읽지 않는다.)
+CMD ["node", "worker/worker.mjs"]

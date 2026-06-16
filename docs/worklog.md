@@ -1100,3 +1100,31 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `080-trace-otel-jaeger-search-20260616.png` — Search 목록에서 `POST /api/proof-assets`가 `dailyproof-web (4)`+`dailyproof-worker (3)` 7 spans로 한 trace에 묶임(두 서비스 동시).
 - `082-trace-otel-web-worker-tree-20260616.png` — 그 trace 상세(waterfall) 트리. web root 아래 worker span이 자식으로, 그 아래 download·db 구간까지. **대표 증거.**
 - `081-db-proof-assets-traceparent-20260616.png` — `proof_assets.traceparent` 컬럼에 W3C traceparent가 저장된 모습(전파가 DB를 매개로 일어남을 보임).
+
+### 4. web/worker 컨테이너 이미지 (Dockerfile)
+
+**이전 상태 / 문제**
+
+- 실행이 흩어져 있다. web은 `npm run dev`, worker는 `npm run worker`, Jaeger는 수동 `docker run` — 환경마다 손으로 맞춰야 하고, 어디서도 "이 커밋을 이렇게 띄운다"가 **재현 가능한 산출물로 고정**돼 있지 않았다. 배포(다음 단계)도 이미지 없이는 시작할 수 없다.
+
+**목적**
+
+- **실행 환경을 이미지로 굳히기**. 레시피(Dockerfile)만 있으면 누구의 머신에서도 같은 컨테이너가 뜨도록 web·worker를 각각 이미지화한다. 다음 단계의 compose·배포가 얹힐 토대.
+
+**한 일**
+
+- `next.config.mjs`에 `output: "standalone"` 추가 — 서버 실행에 필요한 파일·의존성만 추린 `.next/standalone` 산출물 생성.
+- `Dockerfile.web` — 멀티스테이지(deps→builder→runner). runner는 standalone + 정적자산만 담고 비루트(`nextjs`) 유저로 `node server.js` 실행. 공개값(`NEXT_PUBLIC_*`)은 빌드 시 인라인되므로 `--build-arg`로 주입(시크릿은 절대 빌드에 안 넣음).
+- `Dockerfile.worker` — 빌드 단계 없이 `npm ci --omit=dev`(런타임 의존성만) + `worker/`·`lib/`만 담아 비루트(`worker`) 유저로 `node worker/worker.mjs`. env는 컨테이너 런타임에서 주입(로컬의 `--env-file` 대신).
+- `.dockerignore` — `node_modules`/`.next`/`.env*`/`docs`/`*.png` 등 제외(이미지 슬림화 + 시크릿 유출 방지).
+
+**핵심 설계**
+
+- web은 `standalone`이라 런타임 이미지에 전체 `node_modules`가 아니라 추적된 최소 의존성만 들어간다. OTel은 `@vercel/otel`이 instrumentation 번들에 인라인되고 싱글톤 `@opentelemetry/api`만 external로 추적돼 standalone에 포함 — 별도 처리 불필요.
+- worker는 web과 **별도 이미지**(독립 프로세스·다른 의존성 집합). 둘 다 비루트 유저로 실행.
+
+**비고 / 검증 방법**
+
+- `npm run build`가 drvfs(윈도우 마운트)에서 `EPERM copyfile`(`_not-found.html`→`pages/404.html`)로 중단되는 건 **WSL drvfs 전용 현상** — 리눅스 fs(컨테이너 빌드)에선 안 난다. 이를 확인하려고 **WSL 네이티브 경로로 소스를 옮겨 빌드 → 성공(exit 0)**, `.next/standalone/server.js`·`node_modules`·`.next/static` 생성과 `/api/proof-assets`·`/metrics`·`/health/*` 라우트 포함 확인.
+- standalone의 외부 의존성 추적 검증: 컴파일된 `instrumentation.js`는 외부로 Node 내장(module/path/url)만 require하고 `@vercel/otel`은 번들 인라인, `@opentelemetry/api`는 standalone `node_modules`에 존재 → web 컨테이너 부팅에 빠진 모듈 없음.
+- 실제 `docker build`·컨테이너 기동은 Docker가 있는 환경에서 수행(다음 단계 compose에서 일괄). 빌드 예: `docker build -f Dockerfile.web --build-arg NEXT_PUBLIC_SUPABASE_URL=… --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=… -t dailyproof-web .`
