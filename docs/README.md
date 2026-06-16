@@ -84,6 +84,7 @@
 - [x] `architecture/worker.md` — 후처리 worker 상태 전이·운영(폴링·재시도·error_code)
 - [x] `architecture/logging.md` — 로그 포맷·이벤트별 예시·필드 사전·질의/상관
 - [x] `architecture/metrics.md` — 메트릭 사전·PromQL 질의·알림 후보·scrape/Grafana 후속
+- [x] `architecture/tracing.md` — 분산 트레이싱(OTel)·비동기 경계 전파·trace_id와의 관계
 - [x] `architecture/target-architecture.md` — 목표 아키텍처 + 핵심 시나리오
 - [x] `architecture/environments.md` — dev/staging/prod 환경 분리 전략
 - [x] `architecture/branching.md` — 브랜치 전략(GitHub Flow + 환경 승격)
