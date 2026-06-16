@@ -1189,3 +1189,31 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **비고 / 검증 방법**
 
 - 실측: 떠 있는 컨테이너 스택 대상으로 `npm run smoke` → **4개 체크 전부 PASS, exit 0** (`/metrics`의 `dailyproof_jobs_total`·`dailyproof_job_processing_seconds_avg` 노출 포함 확인).
+
+### 7. k8s 워크로드 + liveness/readiness probe (Helm)
+
+**이전 상태 / 문제**
+
+- 컨테이너는 compose로 한 머신에서만 떴다. compose는 "프로세스가 죽었나"까지만 보고, **죽은 컨테이너를 살리거나 트래픽 받을 준비가 됐을 때만 라우팅하는** 오케스트레이션이 없다. 또 선언적 배포 정의가 없어 "이 워크로드를 이렇게 띄운다"가 k8s 표준으로 고정돼 있지 않았다.
+
+**목적**
+
+- **워크로드를 k8s 선언형으로 정의 + 헬스를 오케스트레이터에 연결**. 앞서 만든 `/health/live`·`/health/ready`를 k8s liveness/readiness probe로 물려, "죽으면 재시작·준비됐을 때만 트래픽"을 플랫폼이 자동 처리하게 한다. 환경별 분리·실제 배포(IaC)가 얹힐 토대.
+
+**한 일**
+
+- Helm 차트 `deploy/helm/dailyproof/` 신설 — web Deployment + Service, worker Deployment, `_helpers.tpl`(이름·라벨), `values.yaml`.
+- **probe 연결**: web에 liveness=`/health/live`, readiness=`/health/ready`(httpGet). readiness는 의존성(Supabase 도달) 점검이라 준비 전엔 트래픽 차단.
+- resource requests/limits + 비루트 `securityContext`(runAsNonRoot·uid 1001·capabilities drop ALL) 적용. 이미지 pullPolicy=IfNotPresent(로컬 import 이미지 사용).
+- 비밀 아닌 설정은 일단 deployment env로 주입(추후 ConfigMap/Secret으로 분리). worker는 HTTP 미개방이라 httpGet probe 대상이 없어 제외(정밀 liveness는 후속).
+
+**핵심 설계**
+
+- 새 헬스 체계를 만들지 않고 **기존 `/health/*` 엔드포인트를 그대로 probe로 재사용** — 앱·k8s가 같은 신호를 공유.
+- 차트는 values로 env 차이를 받게 설계해, 다음 단계(staging/prod values)가 자연히 얹히게 함.
+
+**비고 / 검증 방법**
+
+- `helm lint` 통과(icon 권고만). `helm template` → Deployment×2 + Service×1 렌더, probe가 `/health/live`·`/health/ready` 가리킴 확인.
+- **실제 k3s API server-side dry-run**: `helm template | kubectl apply --dry-run=server` → service·deployment×2 모두 `created (server dry run)`(API 스키마 검증 통과). 로컬 k3s(v1.35) 사용.
+- 파드 실제 기동(이미지 import 필요)·Terraform apply는 다음 단계.
