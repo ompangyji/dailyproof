@@ -336,7 +336,8 @@ create table if not exists public.proof_assets (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references auth.users(id) on delete cascade,
   source_path   text not null,                       -- media 버킷 기준 원본 경로 (<uid>/<kind>/<uuid>.<ext>)
-  trace_id      text,                                -- 업로드 시 web이 부여하는 추적 id (web→worker 상관)
+  trace_id      text,                                -- 업로드 시 web이 부여하는 추적 id (web→worker 로그 상관)
+  traceparent   text,                                -- W3C traceparent (OpenTelemetry span 부모 컨텍스트, web→worker)
   kind          text check (kind in ('doits', 'pages')),   -- 업로드 맥락 (기존 업로드 kind와 정합)
   status        text not null default 'uploaded'
                   check (status in ('uploaded', 'processing', 'ready', 'failed')),
@@ -354,8 +355,10 @@ create table if not exists public.proof_assets (
   updated_at    timestamptz not null default now()
 );
 
--- 기존 테이블에도 trace_id 추가(멱등). web→worker 추적용.
+-- 기존 테이블에도 trace_id 추가(멱등). web→worker 로그 상관용.
 alter table public.proof_assets add column if not exists trace_id text;
+-- W3C traceparent(OpenTelemetry span 부모 컨텍스트) 추가(멱등). web→worker span 전파용.
+alter table public.proof_assets add column if not exists traceparent text;
 
 -- 사용자별 상태 조회 (admin/대시보드, 예: 내 failed 자산)
 create index if not exists proof_assets_user_status_idx
