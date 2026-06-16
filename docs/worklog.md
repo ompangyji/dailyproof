@@ -1010,3 +1010,31 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - 문서 작업이라 런타임 검증 없음. 검증 = 문서의 메트릭 이름·라벨·집계식이 `src/app/metrics/route.ts`·`supabase/schema.sql` 현재 코드와 일치하는지 대조(일치 확인).
 - scrape·Grafana·알림 rule의 실제 동작은 [추후] k3s에서 검증.
+
+## 2026-06-16
+
+### 1. OpenTelemetry SDK 도입 (web)
+
+**이전 상태 / 문제**
+
+- 앞서 업로드에 `trace_id`를 실어 web→worker 로그를 묶을 수 있게 했지만, 이건 우리가 만든 **상관용 문자열 ID**일 뿐이라 "어느 단계가 다른 단계의 하위인지", "각 구간이 몇 ms 걸렸는지" 같은 **호출 관계·구간 시간**은 알 수 없었다. 분산 추적의 표준 모델(span 트리)이 없는 상태.
+
+**목적**
+
+- **표준 OpenTelemetry로 끌어올리기**. 택배 송장번호(=trace_id)로 "같은 주문"임을 알던 단계에서, 물류 추적 화면처럼 **단계별 시작·소요·부모-자식 관계**를 보는 단계로 넘어간다. 이번 작업은 그 첫 단추로 web 쪽에 SDK를 붙여 요청마다 root span을 만들고 trace 백엔드로 내보낸다.
+
+**한 일**
+
+- `@vercel/otel`(Next.js 15 권장)·`@opentelemetry/api` 도입.
+- `src/instrumentation.ts`의 `register()`(nodejs 런타임)에서 `registerOTel()` 호출 — `serviceName=dailyproof-web`, `deployment.environment=APP_ENV`, exporter는 **OTLP/HTTP**로 `OTEL_EXPORTER_OTLP_ENDPOINT`(기본 `http://localhost:4318`)의 `/v1/traces`에 전송.
+- `.env.example`에 `OTEL_EXPORTER_OTLP_ENDPOINT`·`OTEL_SERVICE_NAME` 추가.
+
+**핵심 설계**
+
+- 증거(span 트리)를 보려면 백엔드가 필요한데, 컨테이너화는 후속이라 이번엔 **로컬 Jaeger all-in-one(단일 컨테이너, OTLP 4318 수신)** 으로 확인한다. exporter가 OTLP 표준이라 운영에선 endpoint만 바꿔 **Grafana 스택과 일관된 Tempo**로 교체 가능(코드 불변) — 그 의도를 주석·env에 명시.
+- 기존 SIGTERM graceful shutdown 처리는 그대로 두고 그 위에 OTel 등록만 추가(관심사 분리).
+
+**비고 / 검증 방법**
+
+- `tsc --noEmit` 통과. `next build` — **Compiled successfully + 타입 검증 통과 + static pages 9/9 생성**(끝의 `EPERM copyfile`은 OTel 무관, WSL drvfs의 `.next` 복사 권한 제약).
+- span이 실제 백엔드에 뜨는 화면은 worker 전파까지 들어간 뒤 **web→worker→DB 전체 트리로 한 번에** 캡처(후속). 단독 web span만 찍는 것보다 관계가 드러나 증거로 낫기 때문.
