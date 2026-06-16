@@ -1245,3 +1245,30 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `helm template` → ConfigMap×1·Secret×1·Deployment×2·Service×1. web `envFrom`=configMapRef만, worker=configMapRef+secretRef 확인. Secret의 `SUPABASE_SERVICE_ROLE_KEY`는 빈 값(유출 없음).
 - **실 k3s server-side dry-run**: 5개 리소스 모두 `created (server dry run)` 통과.
+
+### 9. staging/prod values 분리 + k8s 문서
+
+**이전 상태 / 문제**
+
+- 차트가 dev 기준 단일 `values.yaml`뿐이라, 환경별 차이(레플리카·리소스·로그 레벨·이미지 태그)를 표현할 방법이 없었다. staging/prod를 같은 정의로 띄우면 "환경 분리"가 형식상에만 존재한다.
+
+**목적**
+
+- **base + 환경 override로 분리**. 공통은 base에 두고 환경 차이만 `values-staging.yaml`/`values-prod.yaml`로 덮어써, 같은 차트로 환경별로 다르게 띄운다. 그리고 차트 구조·렌더/검증/적용·시크릿 주입을 문서로 고정.
+
+**한 일**
+
+- `values-staging.yaml`(replicas 1·tag staging·APP_ENV staging) / `values-prod.yaml`(web·worker replicas 2·리소스 상향·tag prod·APP_ENV prod·LOG_LEVEL warn) 추가.
+- `docs/runbooks/k8s-deploy.md` 작성 — 차트 구조·리소스 표, env별 values 비교표, 시크릿 주입(차트 밖), 렌더/검증/적용 절차(이미지 k3s import 포함), 후속(Terraform apply·레지스트리·Ingress).
+- `docs/README.md` 인덱스 추가.
+
+**핵심 설계**
+
+- override는 **차이만** 담는다(공통은 base) — 중복 없이 환경 간 diff가 한눈에.
+- 차트는 순수 k8s API라 로컬 k3s↔클라우드(EKS 등) 이식 가능 — 문서에 그 이식성 명시.
+
+**비고 / 검증 방법**
+
+- `helm template -f values-staging` / `-f values-prod` 각각 렌더 → **staging: APP_ENV=staging·replicas 1·tag staging / prod: APP_ENV=prod·replicas 2·tag prod**로 실제 다르게 나옴 확인.
+- prod 렌더 **실 k3s server-side dry-run 5개 리소스 통과**.
+- 실제 apply는 Terraform(helm provider) + 이미지 import로 다음 단계 실증.
