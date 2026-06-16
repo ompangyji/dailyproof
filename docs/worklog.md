@@ -1067,3 +1067,36 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `tsc` 통과. worker 구문(`node --check`) OK. `next build` — Compiled successfully + 타입·lint 검증 + static 9/9(끝 `EPERM`은 무관, drvfs `.next` 복사 제약).
 - **전파 스모크 테스트**: 가짜 `traceparent`(`00-0af7…319c-…-01`)를 `propagation.extract`로 복원해 worker span을 시작하니, child span의 trace-id가 **부모와 동일(`0af7…319c`)** 로 확인됨 → 비동기 경계 전파가 실제로 부모-자식을 잇는다.
 - 실제 Jaeger UI에서 web→worker→DB 트리가 한 trace로 묶이는 화면은 다음 단계에서 캡처.
+
+### 3. trace 확인 + 트레이싱 문서
+
+**이전 상태 / 문제**
+
+- web SDK·worker 전파를 코드로 붙였지만, ①실제로 한 trace에 묶이는지 **눈으로 확인된 증거가 없었고**, ②트레이싱 구성·전파 방식·기존 `trace_id`와의 차이가 코드에 흩어져 있어 "왜 서버 라우트를 거치나", "traceparent가 뭐고 trace_id와 뭐가 다른가"를 코드를 읽어야만 알 수 있었다.
+
+**목적**
+
+- **증거로 확정하고, 사전으로 남기기**. 로컬 Jaeger로 web→worker→DB가 한 트리로 이어지는 걸 실제로 띄워 캡처하고, 트레이싱의 구성·비동기 경계 전파·trace_id와의 관계를 한 문서로 모아 관측의 진입점으로 둔다.
+
+**한 일**
+
+- 로컬 **Jaeger all-in-one**(docker, 16686/4318)을 띄우고 web(`npm run dev`)·worker(`npm run worker`)를 호스트에서 실행, 이미지 업로드 1건으로 trace 생성·확인.
+- `docs/architecture/tracing.md` 신설 — ①구성(web/worker SDK·OTLP·Jaeger), ②비동기 경계 전파(서버 라우트 시작점 + traceparent를 DB에 실어 큐 넘김), ③`trace_id`와 OTel trace의 역할 구분, ④확인 방법·증거, ⑤Tempo·sampling 후속.
+- `docs/README.md` 인덱스 추가.
+
+**핵심 설계**
+
+- 증거는 "묶였다"는 목록(Search)보다 **부모-자식이 드러나는 상세 트리(waterfall)** 가 완료기준(span 관계 확인)에 직접 부합 → 트리 화면을 대표 증거로 삼음.
+- 문서에서 메트릭·로그·trace의 3축 역할을 구분하고, trace에서 이상 발견 → `trace_id`로 로그 좁히기의 동선을 명시.
+
+**비고 / 검증 방법**
+
+- 실측: trace `0ef2154` — **Services 2 · Depth 4 · Total Spans 7**. `dailyproof-web POST /api/proof-assets/route`(root) → `executing api route` → **`dailyproof-worker worker process_image`(자식)** → `storage.download`·`db.update proof_assets ready`. worker 구간이 뒤로 떨어진 건 큐 대기(비동기)로 정상, 부모-자식은 ID로 유지.
+- `proof_assets.traceparent` 컬럼에 W3C 값이 실제로 저장됨(전파 매개체 확인).
+- 컨테이너화·Tempo 전환은 [추후].
+
+**자료**
+
+- `080-trace-otel-jaeger-search-20260616.png` — Search 목록에서 `POST /api/proof-assets`가 `dailyproof-web (4)`+`dailyproof-worker (3)` 7 spans로 한 trace에 묶임(두 서비스 동시).
+- `082-trace-otel-web-worker-tree-20260616.png` — 그 trace 상세(waterfall) 트리. web root 아래 worker span이 자식으로, 그 아래 download·db 구간까지. **대표 증거.**
+- `081-db-proof-assets-traceparent-20260616.png` — `proof_assets.traceparent` 컬럼에 W3C traceparent가 저장된 모습(전파가 DB를 매개로 일어남을 보임).
