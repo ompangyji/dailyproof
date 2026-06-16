@@ -25,7 +25,8 @@ worker:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 500m, memory: 256Mi }
 
-# 비밀 아닌 런타임 설정. (추후 ConfigMap으로 분리 — 지금은 deployment env로 주입)
+# 비밀 아닌 런타임 설정 → ConfigMap으로 렌더되어 envFrom으로 주입된다.
+# NEXT_PUBLIC_* 는 공개값(URL·anon 키: RLS로 보호)이라 여기 둔다(placeholder, 환경별 주입).
 config:
   APP_ENV: dev
   LOG_LEVEL: info
@@ -33,6 +34,10 @@ config:
   WORKER_POLL_IDLE_MS: "2000"
   WORKER_RETRY_BASE_MS: "5000"
   WORKER_CALL_TIMEOUT_MS: "10000"
+  NEXT_PUBLIC_SUPABASE_URL: ""
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ""
 
-# 시크릿(SUPABASE_SERVICE_ROLE_KEY 등)·NEXT_PUBLIC_* 는 values에 두지 않는다.
-# 추후 Secret/ConfigMap으로 분리해 envFrom으로 주입한다.
+# 진짜 시크릿 → Secret으로 렌더. 실값은 절대 커밋하지 않는다.
+# 주입: helm 시 -f values-secret.yaml(gitignored) 또는 --set, Terraform 시 tfvars(추후).
+secrets:
+  SUPABASE_SERVICE_ROLE_KEY: ""

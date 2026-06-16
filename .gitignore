@@ -43,3 +43,6 @@ supabase/프로젝트 비밀번호.txt
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Helm secret values (실값 — 커밋 금지)
+deploy/helm/**/values-secret.yaml

@@ -30,8 +30,9 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-          env:
-            {{- range $k, $v := .Values.config }}
-            - name: {{ $k }}
-              value: {{ $v | quote }}
-            {{- end }}
+          # worker는 ConfigMap(비밀 아님) + Secret(service_role) 둘 다 주입.
+          envFrom:
+            - configMapRef:
+                name: {{ include "dailyproof.fullname" . }}-config
+            - secretRef:
+                name: {{ include "dailyproof.fullname" . }}-secret

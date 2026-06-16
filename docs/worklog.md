@@ -1217,3 +1217,31 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `helm lint` 통과(icon 권고만). `helm template` → Deployment×2 + Service×1 렌더, probe가 `/health/live`·`/health/ready` 가리킴 확인.
 - **실제 k3s API server-side dry-run**: `helm template | kubectl apply --dry-run=server` → service·deployment×2 모두 `created (server dry run)`(API 스키마 검증 통과). 로컬 k3s(v1.35) 사용.
 - 파드 실제 기동(이미지 import 필요)·Terraform apply는 다음 단계.
+
+### 8. Secret/ConfigMap 분리
+
+**이전 상태 / 문제**
+
+- 직전 차트는 모든 설정을 deployment의 inline `env`로 박아 넣었다. 비밀(서비스롤)과 비밀-아님(로그 레벨·OTEL endpoint 등)이 한 곳에 섞여, 시크릿 회전·환경별 변경이 워크로드 정의를 건드려야 했고 "비밀을 어디서 주입하나"가 불명확했다.
+
+**목적**
+
+- **비밀/비밀-아님을 k8s 표준으로 분리**. 비밀 아닌 설정은 ConfigMap, 진짜 시크릿은 Secret으로 빼서 `envFrom`으로 주입한다. 설정 변경과 시크릿 주입을 워크로드와 분리하고, 실값은 차트 밖(주입 시점)에만 둔다.
+
+**한 일**
+
+- `templates/configmap.yaml`(비밀 아닌 `config`) + `templates/secret.yaml`(`secrets`, stringData) 추가.
+- 워크로드 `envFrom` 전환: **web = ConfigMap만**(service_role 불필요), **worker = ConfigMap + Secret**.
+- `values.yaml` 재구성: `config`(NEXT_PUBLIC_* 공개값 placeholder 포함) / `secrets`(빈 placeholder). 실값은 `-f values-secret.yaml`(gitignored)·`--set`·Terraform tfvars로 주입.
+- `values-secret.example.yaml`(주입 예시) 추가, `.gitignore`에 `values-secret.yaml` 차단.
+
+**핵심 설계**
+
+- web은 서비스롤을 안 쓰므로 **Secret을 참조조차 안 함**(최소 권한) — 시크릿 노출면을 worker로 한정.
+- NEXT_PUBLIC_*(URL·anon 키)는 RLS로 보호되는 공개값이라 ConfigMap에 둠. 진짜 시크릿(service_role)만 Secret.
+- 차트에는 시크릿 실값이 없다(빈 placeholder) — 렌더 결과에도 실값 미포함.
+
+**비고 / 검증 방법**
+
+- `helm template` → ConfigMap×1·Secret×1·Deployment×2·Service×1. web `envFrom`=configMapRef만, worker=configMapRef+secretRef 확인. Secret의 `SUPABASE_SERVICE_ROLE_KEY`는 빈 값(유출 없음).
+- **실 k3s server-side dry-run**: 5개 리소스 모두 `created (server dry run)` 통과.

@@ -49,11 +49,10 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-          # 비밀 아닌 설정(추후 ConfigMap/Secret으로 분리).
+          # 비밀 아닌 설정은 ConfigMap에서 주입. web은 service_role(시크릿)을 쓰지 않아 Secret 미참조.
+          envFrom:
+            - configMapRef:
+                name: {{ include "dailyproof.fullname" . }}-config
           env:
-            {{- range $k, $v := .Values.config }}
-            - name: {{ $k }}
-              value: {{ $v | quote }}
-            {{- end }}
             - name: OTEL_SERVICE_NAME
               value: dailyproof-web
