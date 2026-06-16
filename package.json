@@ -9,6 +9,7 @@
     "lint": "next lint",
     "notion:sync": "node scripts/notion-sync.mjs",
     "worker": "node --env-file=.env.local worker/worker.mjs",
+    "smoke": "node scripts/smoke.mjs",
     "test": "node --test \"lib/**/*.test.mjs\""
   },
   "dependencies": {
