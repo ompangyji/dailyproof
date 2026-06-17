@@ -55,3 +55,8 @@ config:
 # 주입: helm 시 -f values-secret.yaml(gitignored) 또는 --set, Terraform 시 tfvars(추후).
 secrets:
   SUPABASE_SERVICE_ROLE_KEY: ""
+
+# 배포 후 자동 smoke (ArgoCD PostSync hook). sync마다 health/metrics를 curl로 점검.
+postSyncSmoke:
+  enabled: true
+  image: curlimages/curl:8.11.1

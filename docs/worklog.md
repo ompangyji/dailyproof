@@ -1484,3 +1484,30 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `110-deploy-bad-image-imagepullbackoff-20260618.png` — (비정상) 깨진 태그 새 파드 ImagePullBackOff + 옛 파드 1/1 유지(서비스 무중단).
 - `111-deploy-bad-image-events-20260618.png` — (원인) describe Events: `dailyproof-web:broken` 이미지 pull 실패(ErrImagePull).
 - `112-deploy-recovered-healthy-20260618.png` — (복구) 깨진 파드 사라지고 web 1/1 정상 복귀.
+
+## 2026-06-18
+
+### 1. 배포 후 자동 smoke (ArgoCD PostSync hook)
+
+**이전 상태 / 문제**
+
+- 배포 후 smoke를 **손으로**(`npm run smoke`) 돌려야 했다. 작업명은 "자동화"였지만 실제 트리거가 없어 사람이 안 누르면 검증이 안 됐다. 배포는 ArgoCD(pull)가 하므로 자동화는 CI가 아니라 **ArgoCD에 훅**을 걸어야 한다.
+
+**목적**
+
+- **배포 후 검증을 진짜 자동으로**. ArgoCD가 sync할 때마다 smoke가 자동 실행되고, 실패하면 sync가 Degraded로 표시되는 게이트를 만든다.
+
+**한 일**
+
+- 차트에 `templates/postsync-smoke-job.yaml` 추가 — **ArgoCD PostSync hook** Job(`argocd.argoproj.io/hook: PostSync`). web Service의 `/health/ready`(재시도)·`/health/live`·`/metrics`를 클러스터 내부에서 `curl`로 점검, 실패 시 Job 실패 → sync Degraded. `hook-delete-policy: BeforeHookCreation`(다음 sync 전까지 결과 보존).
+- `values.yaml`에 `postSyncSmoke`(enabled·curl 이미지 고정) 추가.
+
+**핵심 설계**
+
+- 수동 `smoke.mjs`(외부에서 URL 점검)와 달리, hook은 **클러스터 내부에서 Service명으로** 점검(curl 경량 이미지) — 외부 노출 불필요.
+- readiness는 막 뜬 직후 잠깐 503일 수 있어 **재시도 루프**로 안정화.
+
+**비고 / 검증 방법**
+
+- `helm lint`·`template`(Job+hook annotation) + 실 k3s server-side dry-run(7개 리소스, postsync-smoke Job 포함) 통과.
+- 실제 hook 실행(ArgoCD sync 시 Job 자동 생성·smoke 통과/실패)은 ArgoCD에서 sync 후 확인(증거 캡처). 진행 중 이슈는 회고에 정리.
