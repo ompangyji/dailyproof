@@ -23,7 +23,8 @@ pipeline {
     }
 
     stage('helm lint') {
-      agent { docker { image 'alpine/helm:latest' } }
+      // alpine/helm은 ENTRYPOINT가 helm이라 Jenkins의 cat이 안 돈다 → entrypoint 비움.
+      agent { docker { image 'alpine/helm:latest'; args '--entrypoint=' } }
       steps {
         checkout scm
         sh 'helm lint deploy/helm/dailyproof'
@@ -33,7 +34,8 @@ pipeline {
     }
 
     stage('terraform validate') {
-      agent { docker { image 'hashicorp/terraform:latest' } }
+      // hashicorp/terraform도 ENTRYPOINT가 terraform이라 동일 처리.
+      agent { docker { image 'hashicorp/terraform:latest'; args '--entrypoint=' } }
       steps {
         checkout scm
         sh 'terraform -chdir=deploy/terraform fmt -check'
