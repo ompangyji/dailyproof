@@ -1365,3 +1365,28 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - `104-deploy-argocd-healthy-tree-20260617.png` — ArgoCD UI에서 `dailyproof-staging` 앱이 **Synced·Healthy**, 리소스 트리(Deployment→ReplicaSet→Pod) 펼쳐진 화면(GitOps 시각화).
+
+### 3. Ingress + 네트워크 정책 문서
+
+**이전 상태 / 문제**
+
+- web Service가 **ClusterIP**(내부 전용)라 외부 접속은 매번 `kubectl port-forward`(임시 터널)에 의존했다. 정식 외부 진입로가 없고, 업로드 8MB·timeout 같은 **HTTP 계층 정책**도 어디에도 명시돼 있지 않았다.
+
+**목적**
+
+- **정식 진입로(Ingress) + HTTP 정책 명시 + 네트워크 문서화**. 호스트 기반 라우팅으로 port-forward 없이 접속하게 하고, body size·timeout·keep-alive 정책의 위치/근거를 고정한다.
+
+**한 일**
+
+- 차트에 `templates/ingress.yaml`(조건부) 추가 — `ingress.enabled`/`className`(k3s Traefik)/`host`/`path`로 host 기반 라우팅, web Service(:3000)로 연결. `values.yaml`에 `ingress` 블록·정책 annotation 자리.
+- `docs/architecture/network.md` — 트래픽 흐름(클라이언트→Ingress(Traefik)→Service→Pod), HTTP/HTTPS·TLS 위치, body size(8MB)·timeout·keep-alive 정책의 컨트롤러별 적용법(NGINX annotation vs Traefik Middleware 예시), 로컬 접속(/etc/hosts), 후속(cert-manager·정책 강제). README 인덱스 추가.
+
+**핵심 설계**
+
+- 정책은 컨트롤러마다 거는 위치가 달라(차트는 `annotations` 패스스루) **문서에 NGINX·Traefik 두 방식**을 명시. body size는 업로드 한도(버킷 `file_size_limit` 8MB)와 짝맞춤.
+- worker는 HTTP 미개방이라 Ingress 대상 아님. 업로드 파일 자체는 브라우저→Storage 직행이라 이 경로 밖.
+
+**비고 / 검증 방법**
+
+- `helm lint` 통과. `helm template` → 리소스에 **Ingress 포함**(host `dailyproof.local`→web:3000). **실 k3s server-side dry-run**: `ingress.networking.k8s.io/dp-dailyproof-web created (server dry run)` 포함 6개 리소스 통과.
+- 실제 호스트 접속(http://dailyproof.local)·TLS는 로컬 /etc/hosts 매핑·[추후].
