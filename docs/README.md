@@ -96,6 +96,7 @@
 - [x] `runbooks/k8s-deploy.md` — Helm 차트 구조·env별 values·시크릿 주입·렌더/검증/적용
 - [x] `runbooks/argocd.md` — ArgoCD GitOps(pull) 설치·repo 크리덴셜·Application 동기화·UI
 - [x] `runbooks/jenkins.md` — self-hosted Jenkins 파이프라인(Jenkinsfile, GitHub Actions와 동일 검사)
+- [x] `runbooks/rollback.md` — 롤백(ArgoCD/helm/이미지태그) + 배포 후 smoke 검증·체크리스트
 - [x] `retrospective/cicd-gitops.md` — CI/CD·GitOps 트러블슈팅 회고(증상·원인·해결·교훈)
 - [x] `retrospective/wsl-drvfs.md` — WSL/drvfs 환경 제약 회고(chmod·CRLF·EPERM 빌드·pathspec)
 - [x] `retrospective/async-pipeline.md` — 비동기 파이프라인 회고(유령 job·잘린 키·지연 폭발·trace_id null)

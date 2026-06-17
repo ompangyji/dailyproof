@@ -77,6 +77,8 @@ kubectl get pods -n dailyproof-staging                   # web·worker Running
 ```
 또는 ArgoCD UI에서 `dailyproof-staging` 앱의 리소스 트리(Deployment→ReplicaSet→Pod)와 Synced/Healthy 상태를 본다.
 
+**배포 후 검증**: sync 후 `SMOKE_BASE_URL=<앱 주소> npm run smoke`로 게이트. 실패 시 `runbooks/rollback.md`로 롤백.
+
 ---
 
 ## 5. 트러블슈팅

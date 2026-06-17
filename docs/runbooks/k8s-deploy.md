@@ -106,6 +106,8 @@ terraform init && terraform apply
 kubectl get pods -n dailyproof
 ```
 
+배포 후엔 `SMOKE_BASE_URL=<앱 주소> npm run smoke`로 검증하고, 실패 시 `runbooks/rollback.md`로 되돌린다.
+
 > **WSL drvfs 주의**: `/mnt/d`(윈도우 마운트)에서 `terraform init`은 provider/lock 파일 `chmod`가 막혀 실패한다(drvfs 제약). **WSL 네이티브 경로에서 실행**한다 — 예: `rsync -a /mnt/d/dev/DailyProof/deploy ~/dailyproof-deploy/ && cd ~/dailyproof-deploy/deploy/terraform`. (`next build`·git chmod와 같은 계열 문제. 리눅스 fs/CI에선 무관.)
 
 `environment=prod`로 하려면 이미지 태그를 `prod`로 달아 import하면 된다(values-prod.yaml이 `tag: prod`).
