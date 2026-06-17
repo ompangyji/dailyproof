@@ -126,6 +126,22 @@ PostSync hook으로 "정상 배포에서 smoke OK"는 확인했지만, **비교 
   - **리소스 Health ≠ sync operation phase**: 앱 리소스는 전부 Healthy여도, PostSync **hook(Job) 실패**는 **sync 작업 자체를 Failed**로 만든다. "초록 Healthy인데 빨간 Sync failed"가 정상적인 표현이다.
   - **probe와 smoke는 겹치되 다른 층**: probe가 안 보는 지점(여기선 `/metrics`)을 smoke가 잡는다 — 자동 smoke 게이트의 존재 이유가 바로 이 차이다.
 
+## 10. CI 플레이크(일시적 네트워크 실패) — 재실행 기준과 단단하게 만들기
+
+코드를 안 바꿨는데 CI가 한 번씩 빨갛게 죽었다. "내 코드가 깨진 건가?"로 흔들리지 않으려고 기준을 정리한다.
+
+- **증상**:
+  - `docker build` 잡의 `npm ci`가 약 25분을 끌다가 `npm error code ECONNRESET / network aborted`로 실패. 같은 커밋·같은 Dockerfile인데 **다음 실행은 그냥 통과**.
+  - `e2e (playwright)` 잡이 평소 2분대인데 한 번은 11분째 멈춤(in progress) — 잡 안의 `npm ci` / `playwright install chromium` 다운로드가 느린 미러에 걸림.
+- **원인**: 둘 다 **러너 ↔ 외부 레지스트리(npm/플레이wright 브라우저) 네트워크의 일시 장애**. 코드·설정 문제가 아니다. "다음 시도에 동일 커밋이 통과"가 플레이크의 결정적 증거.
+- **해결(당장)**: 멈춘 run을 **취소 → Re-run**. transient 실패는 재실행이 정석이고, 모든 CI에 Re-run 버튼이 있는 이유다.
+- **재실행의 기준(중요)**: **일회성이면 재실행 OK, 반복되면 재실행으로 덮지 말고 원인을 고친다.** "계속 re-run 눌러 통과시키기"는 게이트를 무력화하는 안티패턴.
+- **단단하게(반복되면)**:
+  - `npm ci`에 `--fetch-retries`/타임아웃을 줘 일시 끊김을 자동 재시도.
+  - CI에서 **playwright 브라우저 캐시**(`actions/cache`로 `~/.cache/ms-playwright`) → 매번 chromium 다운로드를 없애 속도↑·플레이크↓.
+- **곁가지로 드러난 것(빌드타임/런타임 경계)**: `@playwright/test`를 devDependency로 추가하자, web 이미지의 `deps` 단계(`npm ci`, dev 포함)가 **쓰지도 않는 playwright + 브라우저를 받을 수 있다.** web 런타임엔 불필요하니, 필요해지면 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`로 브라우저 다운로드만 끈다. (worker는 `npm ci --omit=dev`라 무관.)
+- **교훈**: CI 빨강을 무조건 "내 코드 탓"으로 읽지 말 것 — **transient(네트워크/인프라)와 deterministic(코드/설정)을 가르는 첫 질문은 "같은 커밋을 재실행하면 통과하나?"** 다. 플레이크는 재실행으로 넘기되, **빈도가 늘면 재시도·캐시로 구조적으로 줄인다.**
+
 ---
 
 ## 전체적으로 배운 것
