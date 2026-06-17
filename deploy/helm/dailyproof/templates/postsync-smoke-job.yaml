@@ -1,0 +1,47 @@
+{{- if .Values.postSyncSmoke.enabled }}
+# ArgoCD PostSync hook: sync가 끝날 때마다 자동으로 배포 후 smoke를 돈다.
+# web Service의 /health/live·/health/ready·/metrics를 클러스터 안에서 curl로 점검 →
+# 실패하면 Job 실패 → ArgoCD가 sync를 Degraded로 표시(자동 게이트). 수동 npm run smoke의 자동화판.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-postsync-smoke
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+    app.kubernetes.io/component: smoke
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation # 다음 sync 전까지 결과를 남겨 둠
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 120
+  template:
+    metadata:
+      labels:
+        {{- include "dailyproof.labels" . | nindent 8 }}
+        app.kubernetes.io/component: smoke
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: smoke
+          image: "{{ .Values.postSyncSmoke.image }}"
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              BASE="http://{{ include "dailyproof.fullname" . }}-web:{{ .Values.web.service.port }}"
+              echo "post-deploy smoke → $BASE"
+              # readiness는 의존성 점검이라 막 뜬 직후엔 잠깐 503일 수 있어 재시도.
+              ok=0
+              for i in $(seq 1 10); do
+                if curl -fsS "$BASE/health/ready" | grep -q '"ready":true'; then ok=1; break; fi
+                echo "  waiting for ready ($i/10)"; sleep 3
+              done
+              [ "$ok" = 1 ] || { echo "FAIL: /health/ready"; exit 1; }
+              curl -fsS "$BASE/health/live"  | grep -q '"status":"ok"'          || { echo "FAIL: /health/live"; exit 1; }
+              curl -fsS "$BASE/metrics"      | grep -q 'dailyproof_jobs_total'  || { echo "FAIL: /metrics"; exit 1; }
+              echo "post-deploy smoke OK"
+{{- end }}

@@ -16,3 +16,8 @@ worker:
 config:
   APP_ENV: staging
   LOG_LEVEL: info
+
+# 로컬 k3s에선 Ingress가 LB status를 못 받아 ArgoCD가 영원히 Progressing → PostSync hook을 막는다.
+# 로컬 staging에선 Ingress를 끈다(차트 템플릿은 유지). 실제 LB 있는 클러스터/prod에선 켠다.
+ingress:
+  enabled: false
