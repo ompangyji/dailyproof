@@ -1450,3 +1450,37 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `106-deploy-jenkins-multibranch-branches-20260617.png` — Multibranch 잡이 `main` 브랜치를 자동 발견(Branches 1) + 빌드 성공(초록).
 - `107-deploy-jenkins-multibranch-main-build-20260617.png` — `devops DailyProof/main` 하위 잡 #1 SUCCESS(독립 빌드).
+
+### 6. 롤백 가이드 + 배포 후 smoke 검증
+
+**이전 상태 / 문제**
+
+- 배포(Terraform·ArgoCD)는 붙였지만 **잘못 배포됐을 때 되돌리는 절차가 없었고**, 배포 직후 정상 여부를 **자동으로 게이트하는 단계**도 없었다. 배포 메커니즘이 둘(push/pull)이라 롤백 방법이 갈리는데 그게 어디에도 정리돼 있지 않았다.
+
+**목적**
+
+- **되돌리기 + 배포 후 검증을 절차로 고정**. 메커니즘별 롤백(ArgoCD/helm/이미지 태그)을 문서화하고, 배포 후 `smoke`로 통과해야 넘어가는 게이트를 둔다.
+
+**한 일**
+
+- `docs/runbooks/rollback.md` 신설 — ①배포 후 smoke(`SMOKE_BASE_URL=… npm run smoke`)·확인 체크리스트, ②메커니즘별 롤백: ArgoCD History and Rollback/`git revert`, Terraform·helm(이미지 태그 되돌리기·`helm rollback`), 공통 원칙(이전 태그 보존), ③후속(자동 롤백·레지스트리 버전 태그).
+- `argocd.md`·`k8s-deploy.md`의 "확인" 단계에 **배포 후 smoke + 실패 시 rollback** 한 줄씩 연결. README 인덱스 추가.
+
+**핵심 설계**
+
+- post-deploy smoke는 **기존 `scripts/smoke.mjs` 재사용**(비-0 종료라 게이트로 적합) — 새 도구 안 만들고 배포 대상 URL만 가리켜 실행.
+- 롤백의 최저 보장선 = **"직전 정상 이미지 태그로 되돌리기"**. Terraform 관리 릴리스는 helm 직접 rollback 대신 git revert→apply 우선(tfstate 정합).
+
+**비고 / 검증 방법**
+
+- smoke 스크립트는 이미 실측 통과(health/ready/metrics/jaeger 4체크). 본 작업은 그걸 **배포 후 게이트로 절차화 + 롤백 문서화**.
+- **실제 롤백 시연 완료**: auto-sync를 잠시 끄고 web replicas 1→2로 변경 배포 → `argocd app rollback dailyproof-staging 6` **성공(Phase Succeeded, Synced to d28d25a)**. 단, replicas를 `app set -p`(파라미터)로 바꿔 rollback(=git revision 재적용)으로는 안 되돌려져, `app unset -p web.replicas`로 마무리 — "git revision 롤백 vs out-of-band 파라미터"의 차이를 학습(회고 `retrospective/cicd-gitops.md` §6).
+- **정상/비정상/복구 대비 시연**: 깨진 이미지 태그(`image.web.tag=broken`)로 배포 → **새 web 파드 ImagePullBackOff(비정상)**, **옛 파드는 1/1로 계속 서비스**(롤링업데이트 + readiness 게이트로 서비스 무중단) → `app unset`으로 **복구(1/1)**. "잘못된 배포는 k8s가 막고 서비스는 안 죽는다"를 증거로 확보.
+
+**자료**
+
+- `108-deploy-argocd-rollback-history-20260617.png` — ArgoCD History and Rollback 패널(여러 revision + ROLLBACK). 롤백 기능 동작 화면.
+- `109-deploy-staging-healthy-20260618.png` — (정상) web·worker 1/1 Running.
+- `110-deploy-bad-image-imagepullbackoff-20260618.png` — (비정상) 깨진 태그 새 파드 ImagePullBackOff + 옛 파드 1/1 유지(서비스 무중단).
+- `111-deploy-bad-image-events-20260618.png` — (원인) describe Events: `dailyproof-web:broken` 이미지 pull 실패(ErrImagePull).
+- `112-deploy-recovered-healthy-20260618.png` — (복구) 깨진 파드 사라지고 web 1/1 정상 복귀.
