@@ -1332,3 +1332,36 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - 로컬 선검증(docker 제외): YAML 파싱 OK, `tsc` exit 0, `npm test` fail 0, `helm lint`+staging/prod 렌더 OK, `terraform fmt -check` OK.
 - web 빌드 안전성 확인: 홈·동적 라우트가 `cookies()`/server client로 **동적 렌더**라 static 생성 시 Supabase 미호출 → 더미 공개값 빌드 가능.
 - 실제 CI green은 push 후 GitHub Actions 결과로 확인(증거 캡처).
+
+### 2. ArgoCD GitOps 배포 (staging)
+
+**이전 상태 / 문제**
+
+- 배포가 **push 방식**(내가 `terraform apply`로 클러스터에 밀어넣음)뿐이었다. 누가 클러스터를 직접 바꾸면(드리프트) 자동으로 되돌릴 장치가 없고, "git에 merge하면 곧 배포"라는 GitOps 흐름이 없었다.
+
+**목적**
+
+- **pull 기반 GitOps 도입**. 클러스터 안 ArgoCD가 **git을 source of truth**로 삼아 차트를 끌어와 동기화(auto-sync·selfHeal)하게 한다. Terraform(push)과 다른 메커니즘을 별도 네임스페이스로 공존시켜 둘 다 시연.
+
+**한 일**
+
+- `deploy/argocd/application.yaml` — Application(repo `main`의 `deploy/helm/dailyproof` + `values-staging`)을 `dailyproof-staging`에 배포, `automated`(prune·selfHeal)+`CreateNamespace`.
+- `deploy/argocd/repo-secret.example.yaml` — private repo 클론용 git 크리덴셜(PAT) 템플릿, 실값은 `repo-secret.yaml`(gitignored).
+- `docs/runbooks/argocd.md` — 설치·크리덴셜·Application·시크릿 주입·UI·Terraform 비교·후속. README 인덱스 추가.
+
+**핵심 설계**
+
+- **시크릿은 git에 두지 않음** — Application엔 placeholder, 실값은 `argocd app set -p`로 **클러스터에만** 주입(GitOps 베스트프랙티스). 정식 sealed/external-secrets는 후속.
+- Terraform과 **네임스페이스 분리**(`dailyproof` vs `dailyproof-staging`)로 push/pull 공존.
+- 이미지는 k3s에 import된 `:staging` 재사용(레지스트리 미사용, 후속).
+
+**비고 / 검증 방법**
+
+- 매니페스트 YAML 파싱 OK.
+- **실측**: k3s에 ArgoCD 설치 → Application 적용 → ArgoCD가 **private repo 클론·동기화**(repo 크리덴셜 PAT) → **Synced**. config/secret 주입·이미지 재빌드 후 web·worker **1/1 Running** → 앱 **Healthy**. UI 리소스 트리(앱→Deployment→ReplicaSet→Pod) 확인.
+- **핵심 교훈(빠진 함정)**: web의 `/health/ready`가 쓰는 `NEXT_PUBLIC_SUPABASE_ANON_KEY`는 Next.js가 **빌드 시점에 번들에 인라인**한다 → 런타임 ConfigMap/env로 바꿔도 서버 코드는 **빌드 때 박힌 값**을 쓴다. 키를 rotate하자 박힌 옛 키가 무효화돼 `Unregistered API key`로 readiness 실패했고, **이미지를 새 키로 재빌드**해야 해결됐다. (curl로 새 키는 200 확인 → 키가 아니라 빌드 문제로 판별). worker의 `SUPABASE_SERVICE_ROLE_KEY`는 NEXT_PUBLIC_ 아님 → 런타임 Secret 주입으로 정상.
+- 후속: 런타임 교체가 필요하면 server를 비-public env로 읽도록 리팩터(또는 런타임 config 주입). 시크릿 노출 시 대응은 Supabase 새 API key(secret key) 교체·옛 키 삭제.
+
+**자료**
+
+- `104-deploy-argocd-healthy-tree-20260617.png` — ArgoCD UI에서 `dailyproof-staging` 앱이 **Synced·Healthy**, 리소스 트리(Deployment→ReplicaSet→Pod) 펼쳐진 화면(GitOps 시각화).

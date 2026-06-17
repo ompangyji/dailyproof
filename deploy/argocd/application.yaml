@@ -1,0 +1,28 @@
+# ArgoCD Application: git의 Helm 차트를 클러스터로 동기화(GitOps, pull 기반).
+# git이 source of truth — main의 deploy/helm/dailyproof(values-staging)를 dailyproof-staging에 배포.
+# Terraform(push IaC)의 dailyproof 네임스페이스와 분리해 둘이 공존한다.
+#
+# 시크릿은 여기 두지 않는다(git 깨끗). 실값은 argocd app set -p 로 클러스터에만 주입(runbooks/argocd.md).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dailyproof-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ompangyji/dailyproof.git
+    targetRevision: main
+    path: deploy/helm/dailyproof
+    helm:
+      valueFiles:
+        - values-staging.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dailyproof-staging
+  syncPolicy:
+    automated:
+      prune: true # git에서 사라진 리소스는 클러스터에서도 제거
+      selfHeal: true # 클러스터가 git과 다르면 git 기준으로 되돌림
+    syncOptions:
+      - CreateNamespace=true

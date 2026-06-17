@@ -110,9 +110,10 @@ kubectl get pods -n dailyproof
 
 `environment=prod`로 하려면 이미지 태그를 `prod`로 달아 import하면 된다(values-prod.yaml이 `tag: prod`).
 
+> ⚠️ web 이미지의 `NEXT_PUBLIC_*`(URL·anon 키)는 **빌드 시점에 번들에 박힌다.** 이 값을 바꾸려면 `docker tag`만으론 안 되고 `docker build --build-arg NEXT_PUBLIC_...`로 **재빌드**한 뒤 import해야 한다(자세한 함정은 `argocd.md` §5 트러블슈팅).
+
 ## 6. 후속
 
-- **이미지 레지스트리**: 지금은 로컬 import. CI에서 빌드→레지스트리 push→태그 참조로 전환([추후]).
 - **이미지 레지스트리**: 지금은 로컬 import. CI에서 빌드→레지스트리 push→태그 참조로 전환([추후]).
 - **Ingress**: web Service는 ClusterIP. 외부 노출은 Ingress(k3s Traefik) 또는 NodePort로([추후], 배포 단계).
 - **worker liveness**: HTTP가 없어 현재 probe 없음 — 폴링 동작을 드러내는 exec/파일 기반 probe로 보강([추후]).
