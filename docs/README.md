@@ -103,4 +103,4 @@
 - [x] `retrospective/notion-sync.md` — Notion sync 회고(거대 문서 타임아웃·병렬 삭제·재시도)
 - [x] `retrospective/test-layers.md` — 테스트 계층 회고(유닛·health·smoke·E2E가 각각 보는 것, E2E를 왜·어디에)
 - [ ] `incidents/incident-log.md` — 장애 재현 기록
-- [ ] `performance/performance.md` — 성능 테스트 결과
+- [x] `performance/performance.md` — 성능 베이스라인(k6, 조회+DB vs 순수앱 대비·threshold·병목 가설)
