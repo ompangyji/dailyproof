@@ -101,5 +101,6 @@
 - [x] `retrospective/wsl-drvfs.md` — WSL/drvfs 환경 제약 회고(chmod·CRLF·EPERM 빌드·pathspec)
 - [x] `retrospective/async-pipeline.md` — 비동기 파이프라인 회고(유령 job·잘린 키·지연 폭발·trace_id null)
 - [x] `retrospective/notion-sync.md` — Notion sync 회고(거대 문서 타임아웃·병렬 삭제·재시도)
+- [x] `retrospective/test-layers.md` — 테스트 계층 회고(유닛·health·smoke·E2E가 각각 보는 것, E2E를 왜·어디에)
 - [ ] `incidents/incident-log.md` — 장애 재현 기록
 - [ ] `performance/performance.md` — 성능 테스트 결과
