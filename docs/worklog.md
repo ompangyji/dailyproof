@@ -1523,3 +1523,32 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `117-deploy-argocd-postsync-job-failed-detail-20260618.png` — (비정상) smoke Job 상세: "Job has reached the specified backoff limit".
 - `118-deploy-argocd-postsync-logs-fail-metrics-20260618.png` — (비정상) Job LOGS 탭: `503 / FAIL: /metrics`.
 - `119-deploy-postsync-smoke-recovered-20260618.txt` — (복구) RPC 원복 후 재sync: smoke `Succeeded` `post-deploy smoke OK`, sync `Phase: Succeeded`.
+
+### 2. E2E 테스트(Playwright) + CI e2e 게이트
+
+**이전 상태 / 문제**
+
+- 유닛 테스트(`node --test`)·health check·배포 후 smoke는 있었지만, 브라우저로 실제 사용자 흐름이 도는지 보는 **E2E 층이 비어 있었다**(계획서 "테스트 자동화" 완료 기준 중 최소 E2E 1개 미충족).
+- 유닛이 다 통과해도 "비로그인인데 보호 페이지가 열리는" 류의 라우팅·미들웨어 회귀는 유닛으로 못 잡는다.
+
+**목적**
+
+- 결정적으로 통과하는 최소 E2E를 만들어 사용자 흐름을 검증하고, CI merge 게이트에 묶어 PR마다 흐름 깨짐을 자동 차단한다.
+
+**한 일**
+
+- Playwright(`@playwright/test`, chromium 단일) 도입. `playwright.config.ts`의 webServer가 빌드된 앱을 `next start`로 띄운다. 더미 공개키 + 미기동 포트(127.0.0.1:54321)로 supabase 호출을 즉시 실패시켜 실제 백엔드 없이 '비로그인'으로 처리 → 결정적 통과.
+- `e2e/auth-guard.spec.ts`: ① 비로그인으로 보호 경로(`/`) 접속 → `/login?next=` 리다이렉트 + 로그인 폼(헤딩·Email·Password·Sign in) 노출, ② Sign up 링크 → `/signup` 이동.
+- `ci.yml`에 `e2e` 잡 추가: `npm ci` → chromium 설치 → 더미 공개값으로 `build` → `next start` + Playwright → 리포트 아티팩트 업로드.
+
+**핵심 설계**
+
+- 이 CI E2E는 배포 후 자동 smoke 게이트(PostSync hook)의 **"merge 전" 버전**이다. 같은 "자동으로 비정상을 잡아 막는다"를 다른 시점(merge 전 / 배포 후)에 건 것.
+- 인증 가드 흐름을 고른 이유·테스트 계층 정리는 회고 `retrospective/test-layers.md`.
+
+**검증**
+
+- PR에서 CI 워크플로 run 성공(Status Success, 2m 38s). 잡 4개 전부 green — `e2e (playwright)` 2m 22s 포함. Playwright 2개 테스트 통과, `playwright-report` 아티팩트 생성.
+
+**자료**
+- `120-test-ci-e2e-pass-20260618.png` — CI 워크플로 run 성공: `e2e (playwright)` 등 4개 잡 green + playwright-report 아티팩트.

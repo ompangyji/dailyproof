@@ -10,7 +10,8 @@
     "notion:sync": "node scripts/notion-sync.mjs",
     "worker": "node --env-file=.env.local worker/worker.mjs",
     "smoke": "node scripts/smoke.mjs",
-    "test": "node --test \"lib/**/*.test.mjs\""
+    "test": "node --test \"lib/**/*.test.mjs\"",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.15",
@@ -38,6 +39,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.1",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
