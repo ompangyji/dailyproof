@@ -52,3 +52,6 @@ deploy/terraform/terraform.tfvars
 deploy/terraform/.terraform/
 deploy/terraform/*.tfstate*
 deploy/terraform/.terraform.lock.hcl
+
+# ArgoCD repo 크리덴셜 (PAT — 커밋 금지)
+deploy/argocd/repo-secret.yaml
