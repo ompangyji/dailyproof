@@ -1,0 +1,11 @@
+# 실값을 채운 사본을 terraform.tfvars로 만든다(gitignored). 시크릿은 절대 커밋 금지.
+environment                   = "staging" # staging | prod
+
+supabase_service_role_key     = "YOUR-SERVICE-ROLE-KEY"
+next_public_supabase_url      = "https://YOUR-PROJECT.supabase.co"
+next_public_supabase_anon_key = "YOUR-ANON-KEY"
+
+# 필요 시 override:
+# kube_context = "default"
+# namespace    = "dailyproof"
+# release_name = "dp"

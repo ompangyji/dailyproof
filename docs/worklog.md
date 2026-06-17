@@ -1272,3 +1272,30 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `helm template -f values-staging` / `-f values-prod` 각각 렌더 → **staging: APP_ENV=staging·replicas 1·tag staging / prod: APP_ENV=prod·replicas 2·tag prod**로 실제 다르게 나옴 확인.
 - prod 렌더 **실 k3s server-side dry-run 5개 리소스 통과**.
 - 실제 apply는 Terraform(helm provider) + 이미지 import로 다음 단계 실증.
+
+### 10. Terraform으로 Helm 차트 배포 (IaC 실증)
+
+**이전 상태 / 문제**
+
+- 차트는 dry-run까지만 검증했고, **IaC 도구로 실제 클러스터에 띄운 적이 없었다.** 채용공고가 Terraform(IaC)을 요구하는데, "추후 AWS에서" 식 문서로는 실증이 안 된다 — 지금 이 프로젝트에서 진짜로 `terraform apply`가 도는 걸 보여야 한다.
+
+**목적**
+
+- **IaC를 실물로 증명**. `helm install`을 직접 치는 대신 **Terraform(helm provider)** 이 릴리스를 선언적으로 관리하게 해, 로컬 k3s에 실제 배포(apply)한다.
+
+**한 일**
+
+- `deploy/terraform/` 신설 — `main.tf`(helm_release: 로컬 차트 + 환경 values 참조), `variables.tf`, `outputs.tf`, `terraform.tfvars.example`.
+- 시크릿/공개키는 **tfvars로 주입**(`set_sensitive`/`set`) — 차트엔 placeholder, 실값은 `terraform.tfvars`(gitignored).
+- `.gitignore`에 tfvars·`.terraform/`·tfstate 차단. `runbooks/k8s-deploy.md`에 Terraform 실행 절(이미지 import·apply·drvfs 주의) 추가.
+
+**핵심 설계**
+
+- 릴리스를 명령(`helm install`)이 아니라 **선언(terraform state)** 으로 관리 → 재현·변경·삭제가 코드로 추적됨.
+- 차트의 환경 values(`values-${env}.yaml`)를 그대로 재사용 — IaC가 기존 차트를 감싸는 얇은 레이어.
+
+**비고 / 검증 방법**
+
+- `terraform fmt`/`init`/`validate` 통과(helm provider 2.17). drvfs chmod 제약으로 init이 막혀 **WSL 네이티브 경로에서 검증**.
+- **실 k3s 대상 `terraform plan` → `Plan: 1 to add`**(helm_release 생성, outputs dp/dailyproof/deployed) — apply-ready 확인.
+- **실측(IaC 실증)**: 이미지를 `:staging` 태그로 k3s containerd에 import 후 `terraform apply` → **`Apply complete! Resources: 1 added`**, `release_status = "deployed"`. `kubectl get pods -n dailyproof` → `dp-dailyproof-web`·`dp-dailyproof-worker` 모두 **`1/1 Running`** = Terraform이 로컬 k3s에 차트를 실제 배포하고 파드가 기동됨(helm install 직접이 아니라 IaC로 관리).

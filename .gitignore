@@ -46,3 +46,9 @@ next-env.d.ts
 
 # Helm secret values (실값 — 커밋 금지)
 deploy/helm/**/values-secret.yaml
+
+# Terraform (상태·시크릿 — 커밋 금지)
+deploy/terraform/terraform.tfvars
+deploy/terraform/.terraform/
+deploy/terraform/*.tfstate*
+deploy/terraform/.terraform.lock.hcl
