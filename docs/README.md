@@ -91,5 +91,6 @@
 - [x] `plan/notion-sync.md` — docs→Notion 동기화 설계 (구현: `scripts/notion-sync.mjs` + `.github/workflows/notion-sync.yml`)
 - [x] `runbooks/runbook.md` — 운영 절차(health/probe·재시작·롤백·stuck/failed job·흔한 incident)
 - [x] `runbooks/local-stack.md` — docker-compose 로컬 스택 구동·smoke test·트러블슈팅
+- [x] `runbooks/k8s-deploy.md` — Helm 차트 구조·env별 values·시크릿 주입·렌더/검증/적용
 - [ ] `incidents/incident-log.md` — 장애 재현 기록
 - [ ] `performance/performance.md` — 성능 테스트 결과

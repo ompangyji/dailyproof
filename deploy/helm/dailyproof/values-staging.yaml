@@ -1,0 +1,18 @@
+# staging 환경 override. base(values.yaml)에 이 파일을 덮어쓴다:
+#   helm template dp deploy/helm/dailyproof -f deploy/helm/dailyproof/values-staging.yaml
+# 시크릿/공개키 실값은 여기 두지 않고 values-secret.yaml(gitignored)/--set로 주입.
+image:
+  web:
+    tag: staging
+  worker:
+    tag: staging
+
+web:
+  replicas: 1
+
+worker:
+  replicas: 1
+
+config:
+  APP_ENV: staging
+  LOG_LEVEL: info

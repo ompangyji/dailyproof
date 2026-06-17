@@ -1,0 +1,25 @@
+# prod 환경 override. base(values.yaml)에 이 파일을 덮어쓴다:
+#   helm template dp deploy/helm/dailyproof -f deploy/helm/dailyproof/values-prod.yaml
+# 시크릿/공개키 실값은 여기 두지 않고 values-secret.yaml(gitignored)/--set로 주입.
+image:
+  web:
+    tag: prod
+  worker:
+    tag: prod
+
+# 가용성: web 다중 레플리카(무중단·부하 분산), worker도 2개로 처리량 확보.
+web:
+  replicas: 2
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 1Gi }
+
+worker:
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+config:
+  APP_ENV: prod
+  LOG_LEVEL: warn      # prod는 소음 줄여 warn 이상만
