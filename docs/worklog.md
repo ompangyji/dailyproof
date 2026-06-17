@@ -1414,4 +1414,9 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **비고 / 검증 방법**
 
 - 동일 검사 항목은 GitHub Actions CI에서 이미 green 확인됨(typecheck·test·helm·terraform·docker build). Jenkinsfile은 그 단계를 그대로 미러링.
-- 실제 Jenkins 파이프라인 green은 로컬 Jenkins(Docker, 소켓 공유) 기동 후 실행해 확인(증거 캡처). 소켓 직마운트·`-u root`는 로컬 데모 단순화 — 권한 최소화는 후속.
+- **실측**: 로컬 Jenkins(Docker, 소켓 공유) 기동 → Pipeline(from SCM) 빌드 → **4스테이지 전부 green(빌드 #3, SUCCESS)**. 도중 `alpine/helm`·`hashicorp/terraform`이 ENTRYPOINT가 도구라 Jenkins의 `cat`이 안 돌아 실패 → docker 에이전트에 **`--entrypoint=`** 로 해결(수정 후 통과). 소켓 직마운트·`-u root`는 로컬 데모 단순화 — 권한 최소화는 후속.
+- 트리거: 로컬 Jenkins는 localhost라 GitHub webhook이 닿지 않음(즉시 자동 불가) → 자동은 Poll SCM, 또는 Build Now 수동. (관리형 GitHub Actions는 push/PR 즉시 자동 — self-hosted와의 차이)
+
+**자료**
+
+- `105-deploy-jenkins-pipeline-pass-20260617.png` — Jenkins Stages에서 빌드 #3가 4스테이지(typecheck+tests·helm lint·terraform validate·docker build) 전부 초록(SUCCESS). self-hosted Jenkins가 GitHub Actions와 동일 CI를 통과한 화면.
