@@ -19,6 +19,20 @@ web:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { cpu: "1", memory: 512Mi }
 
+# 외부 노출(Ingress). k3s 기본 컨트롤러는 Traefik. (포트포워딩을 대체하는 정식 진입로)
+ingress:
+  enabled: true
+  className: traefik
+  host: dailyproof.local # 로컬은 노드 IP를 /etc/hosts 에 매핑(또는 *.localhost)
+  path: /
+  pathType: Prefix
+  # HTTP 정책은 컨트롤러별 annotation/Middleware로 건다(architecture/network.md 참조).
+  #   업로드 8MB 대응 body size / read timeout / keep-alive 등.
+  #   NGINX 예) nginx.ingress.kubernetes.io/proxy-body-size: "8m"
+  #            nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+  #   Traefik(k3s)의 body size·timeout은 Middleware CRD로 건다(network.md에 예시).
+  annotations: {}
+
 worker:
   replicas: 1
   resources:
