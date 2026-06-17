@@ -94,5 +94,6 @@
 - [x] `runbooks/local-stack.md` — docker-compose 로컬 스택 구동·smoke test·트러블슈팅
 - [x] `runbooks/k8s-deploy.md` — Helm 차트 구조·env별 values·시크릿 주입·렌더/검증/적용
 - [x] `runbooks/argocd.md` — ArgoCD GitOps(pull) 설치·repo 크리덴셜·Application 동기화·UI
+- [x] `runbooks/jenkins.md` — self-hosted Jenkins 파이프라인(Jenkinsfile, GitHub Actions와 동일 검사)
 - [ ] `incidents/incident-log.md` — 장애 재현 기록
 - [ ] `performance/performance.md` — 성능 테스트 결과
