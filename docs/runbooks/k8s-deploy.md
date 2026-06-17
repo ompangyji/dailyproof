@@ -84,9 +84,35 @@ docker save dailyproof-worker:latest | sudo k3s ctr images import -
 
 ---
 
-## 5. 후속
+## 5. Terraform으로 실제 배포 (IaC)
 
-- **실제 apply**: Terraform helm_release로 로컬 k3s에 배포(이미지 import 후) — IaC 실증.
+`helm install`을 직접 치는 대신 **Terraform(helm provider)** 이 릴리스를 선언적으로 관리한다(`deploy/terraform/`).
+
+```bash
+# 1) 이미지를 k3s containerd로 import (레지스트리 미사용). values 태그에 맞춰 태그를 단다.
+for c in web worker; do
+  docker tag dailyproof-$c:latest dailyproof-$c:staging
+  docker save dailyproof-$c:staging | sudo k3s ctr images import -
+done
+
+# 2) 시크릿 주입값 작성(gitignored)
+cd deploy/terraform
+cp terraform.tfvars.example terraform.tfvars   # 실값 채우기 (environment=staging)
+
+# 3) apply
+terraform init && terraform apply
+
+# 4) 확인
+kubectl get pods -n dailyproof
+```
+
+> **WSL drvfs 주의**: `/mnt/d`(윈도우 마운트)에서 `terraform init`은 provider/lock 파일 `chmod`가 막혀 실패한다(drvfs 제약). **WSL 네이티브 경로에서 실행**한다 — 예: `rsync -a /mnt/d/dev/DailyProof/deploy ~/dailyproof-deploy/ && cd ~/dailyproof-deploy/deploy/terraform`. (`next build`·git chmod와 같은 계열 문제. 리눅스 fs/CI에선 무관.)
+
+`environment=prod`로 하려면 이미지 태그를 `prod`로 달아 import하면 된다(values-prod.yaml이 `tag: prod`).
+
+## 6. 후속
+
+- **이미지 레지스트리**: 지금은 로컬 import. CI에서 빌드→레지스트리 push→태그 참조로 전환([추후]).
 - **이미지 레지스트리**: 지금은 로컬 import. CI에서 빌드→레지스트리 push→태그 참조로 전환([추후]).
 - **Ingress**: web Service는 ClusterIP. 외부 노출은 Ingress(k3s Traefik) 또는 NodePort로([추후], 배포 단계).
 - **worker liveness**: HTTP가 없어 현재 probe 없음 — 폴링 동작을 드러내는 exec/파일 기반 probe로 보강([추후]).
