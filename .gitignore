@@ -6,6 +6,12 @@
 # testing
 /coverage
 
+# playwright (e2e 산출물 — 커밋 안 함)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 # next.js
 /.next/
 /out/
