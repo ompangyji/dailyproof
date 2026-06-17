@@ -117,10 +117,10 @@ CI(GitHub Actions·Jenkins)와 배포(Terraform·ArgoCD)를 붙이며 막혔던 
 PostSync hook으로 "정상 배포에서 smoke OK"는 확인했지만, **비교 대상인 "비정상 배포를 자동으로 잡아 막는다"** 가 없으면 게이트의 가치가 증명되지 않는다. 그래서 일부러 비정상을 만들어 대비했다.
 
 - **설계의 핵심(왜 이렇게 깨야 하나)**: 단순히 이미지를 깨거나 DB 의존성을 끊으면 `/health/ready`(readiness probe)가 503 → pod NotReady → Deployment가 안 Healthy → **§8과 같은 이유로 Sync 단계에서 막혀 PostSync hook이 아예 안 돈다.** 즉 "smoke가 잡았다"가 아니라 "그 전에 멈췄다"가 돼버린다.
-- **격리 지점**: smoke가 점검하는 3개 중 k8s probe가 보지 **않는** 것은 `/metrics`뿐이다(`/health/ready`·`/health/live`는 probe와 겹침). 그리고 `/health/ready`는 테이블 `proof_assets` 조회, `/metrics`는 RPC `metrics_snapshot()` 호출로 **DB 경로가 다르다.** → **RPC만 깨면** ready/live는 정상(pod Healthy) → Sync 단계 통과 → PostSync smoke가 돌고 **`/metrics`에서만 실패**.
-- **실증 절차**: Supabase에서 `alter function public.metrics_snapshot() rename to …_demo_off`(+`notify pgrst,'reload schema'`)로 RPC만 깬 뒤 `argocd app sync`.
-  - **비정상 결과**: web/worker Deployment는 `Synced/Healthy`인데 PostSync smoke Job `Failed`("backoff limit") → sync **`Phase: Failed`**. smoke 로그 `curl: (22) … 503` → **`FAIL: /metrics`**(자료 115·118). UI는 **App Health `Healthy`(초록) ↔ Last Sync `Failed`(빨강)** 대비(116·117).
-  - **복구**: RPC 원복 후 재sync → smoke `Succeeded`, `post-deploy smoke OK`, sync `Phase: Succeeded`(자료 119).
+- 격리 지점: smoke가 점검하는 3개 중 k8s probe가 보지 않는 것은 `/metrics` 하나뿐이다(`/health/ready`·`/health/live`는 probe와 겹침). 게다가 `/health/ready`는 테이블 `proof_assets` 조회, `/metrics`는 RPC `metrics_snapshot()` 호출로 DB 경로가 다르다. 그래서 RPC만 깨면 ready/live는 정상(pod Healthy)이라 Sync 단계를 통과하고, PostSync smoke가 돌다가 `/metrics`에서만 실패한다.
+- 실증 절차: Supabase에서 `alter function public.metrics_snapshot() rename to …_demo_off`(+`notify pgrst,'reload schema'`)로 RPC만 깬 뒤 `argocd app sync`.
+  - 비정상 결과: web/worker Deployment는 Synced·Healthy인데 PostSync smoke Job이 Failed("backoff limit")가 되고 sync도 Phase Failed로 막혔다. smoke 로그는 `curl: (22) … 503` 후 `FAIL: /metrics`(자료 115·118). UI는 App Health는 Healthy(초록)인데 Last Sync는 Failed(빨강)로 대비됐다(자료 116·117).
+  - 복구: RPC 원복 후 재sync하니 smoke Succeeded, `post-deploy smoke OK`, sync Phase Succeeded로 돌아왔다(자료 119).
 - **교훈**:
   - **게이트는 "비정상을 막는 것"으로만 증명된다** — 정상 통과만으론 부족. 정상↔비정상↔복구를 한 세트로 남겼다.
   - **리소스 Health ≠ sync operation phase**: 앱 리소스는 전부 Healthy여도, PostSync **hook(Job) 실패**는 **sync 작업 자체를 Failed**로 만든다. "초록 Healthy인데 빨간 Sync failed"가 정상적인 표현이다.

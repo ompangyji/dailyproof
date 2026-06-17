@@ -1513,7 +1513,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - **진행 중 이슈(해결)**: hook을 붙였더니 sync가 hang하고 smoke Job이 안 생김 → 진단 결과 ArgoCD가 **Ingress가 Healthy가 될 때까지 Sync 단계에서 대기**(k3s Traefik가 Ingress LB status 미발행 → 영원히 Progressing) → PostSync 단계가 막힘. **해결**: `values-staging.yaml`에 `ingress.enabled: false`(로컬 staging 한정, 차트 템플릿은 유지). 상세는 회고 `retrospective/cicd-gitops.md` §8.
 - **실측 성공**: fix 후 sync에서 **PostSync smoke Job 자동 생성 → `post-deploy smoke OK` → Completed**(`dailyproof-staging-dailyproof-postsync-smoke-…`). 이제 sync마다 배포 후 smoke가 자동 게이트. (부수: Ingress는 `ingress.enabled=false` + auto-prune로 자동 삭제 — 회고 §8)
 - merge 후 ArgoCD revision을 다시 `main`으로 되돌려(`argocd app set … --revision main`) 재동기화 → `Synced to main (844d89d)`, `Health: Healthy`, sync `Phase: Succeeded`(11s)에서 PostSync hook이 `Running → Succeeded`로 자동 실행됨을 재확인.
-- **비정상 차단 실증(정상/비정상 대비)**: "정상 통과"만으론 게이트의 가치가 안 드러나, 일부러 비정상 배포를 만들어 **자동 smoke가 잡아 sync를 막는지** 확인. probe가 안 보는 `/metrics`(RPC `metrics_snapshot`)만 깨서 web/worker는 `Healthy`인데 **smoke만 `FAIL: /metrics`(503) → Job Failed → sync `Phase: Failed`**. RPC 원복 후 재sync로 `post-deploy smoke OK` 복구까지 한 세트. 상세 설계·교훈은 회고 `retrospective/cicd-gitops.md` §9.
+- 비정상 차단 실증(정상/비정상 대비): "정상 통과"만으론 게이트의 가치가 안 드러나, 일부러 비정상 배포를 만들어 자동 smoke가 잡아 sync를 막는지 확인했다. probe가 안 보는 `/metrics`(RPC metrics_snapshot)만 깨자, web/worker는 Healthy인데 smoke만 `/metrics`에서 503으로 실패했다. 그 결과 smoke Job이 Failed가 되고 sync도 Phase Failed로 막혔다. RPC를 원복하고 재sync하니 post-deploy smoke OK로 복구됐다(정상→비정상→복구 한 세트). 상세 설계·교훈은 회고 `retrospective/cicd-gitops.md` 9절 참고.
 
 **자료**
 - `113-deploy-postsync-smoke-ok-20260618.png` — (정상) PostSync smoke Job `Completed` + 로그 `post-deploy smoke OK`.
