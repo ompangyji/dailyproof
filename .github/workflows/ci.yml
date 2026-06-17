@@ -1,0 +1,66 @@
+# CI: PR/main push 시 코드·매니페스트·이미지를 검증하는 merge gate.
+# (ESLint는 별도 설정 전이라 제외 — 정적 검사는 tsc 타입체크로 대체.)
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: typecheck + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck (tsc)
+        run: npx tsc --noEmit
+      - name: Unit tests
+        run: npm test
+
+  manifests:
+    name: helm + terraform 검증
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/setup-helm@v4
+      - name: Helm lint + render (staging/prod)
+        run: |
+          helm lint deploy/helm/dailyproof
+          helm template dp deploy/helm/dailyproof -f deploy/helm/dailyproof/values-staging.yaml > /dev/null
+          helm template dp deploy/helm/dailyproof -f deploy/helm/dailyproof/values-prod.yaml > /dev/null
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Terraform fmt + validate
+        run: |
+          terraform -chdir=deploy/terraform fmt -check
+          terraform -chdir=deploy/terraform init -backend=false
+          terraform -chdir=deploy/terraform validate
+
+  images:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build worker image
+        run: docker build -f Dockerfile.worker -t dailyproof-worker:ci .
+      - name: Build web image (더미 공개값으로 빌드 검증)
+        run: |
+          docker build -f Dockerfile.web \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL=https://ci-dummy.supabase.co \
+            --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-dummy \
+            -t dailyproof-web:ci .
