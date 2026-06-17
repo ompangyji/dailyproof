@@ -47,15 +47,21 @@ docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 
 ---
 
-## 3. 파이프라인 잡 생성·실행
+## 3. Multibranch Pipeline 잡 생성·실행
 
-- New Item → 이름 입력 → **Pipeline** → OK
-- Pipeline 섹션: Definition = **Pipeline script from SCM**
-  - SCM: Git, Repository URL: `https://github.com/ompangyji/dailyproof.git`, Credentials: 위 `github-pat`
-  - Branch: `*/main` (또는 작업 브랜치), Script Path: `Jenkinsfile`
-- Save → **Build Now**
+단일 브랜치에 잡을 박지 않고, **Jenkinsfile이 있는 모든 브랜치를 자동 발견·빌드**하는 Multibranch Pipeline을 쓴다 — 브랜치를 지워도 안 깨지고, merge 전 브랜치도 검사하는 pre-merge 게이트가 된다(GitHub Actions가 브랜치/PR마다 도는 것과 동일).
 
-각 스테이지가 `checkout scm`으로 소스를 받고 해당 도구 컨테이너에서 검사를 수행한다. 모든 스테이지 초록이면 GitHub Actions CI와 동등하게 통과한 것.
+- New Item → 이름 입력 → **Multibranch Pipeline** → OK
+- **Branch Sources** → Add source → **Git**
+  - Repository URL: `https://github.com/ompangyji/dailyproof.git`, Credentials: 위 `github-pat`
+- **Build Configuration**: `by Jenkinsfile`, Script Path: `Jenkinsfile` (기본)
+- **Scan Multibranch Pipeline Triggers** → **Periodically if not otherwise run** → 예: 1~5분
+  (로컬 Jenkins는 localhost라 GitHub webhook이 안 닿아 **주기 스캔(polling)** 으로 자동화)
+- Save → repo를 스캔해 **Jenkinsfile 있는 브랜치마다 하위 잡을 자동 생성·빌드**한다.
+
+결과: 잡 안에 브랜치 목록이 뜨고(예: `main`, `feature/*`), 각 브랜치가 **자기 Jenkinsfile로 독립 빌드**된다. 모든 스테이지 초록이면 GitHub Actions CI와 동등하게 통과한 것. (기존 단일 Pipeline 잡이 있으면 삭제)
+
+> Jenkinsfile이 없는 브랜치는 빌드 정의가 없으므로 자동 제외된다. Jenkinsfile을 `main`에 두면 거기서 딴 모든 브랜치가 물려받아 자동 대상이 된다.
 
 ---
 
@@ -66,7 +72,8 @@ docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 | 형태 | 관리형(SaaS) | self-hosted(직접 운영) |
 | 정의 | `.github/workflows/ci.yml` | `Jenkinsfile` |
 | 검사 | typecheck/test·helm·terraform·docker build | **동일**(미러링) |
-| 트리거 | push/PR(자동) | Build Now / SCM 폴링·웹훅([추후]) |
+| 트리거 | push/PR(자동) | Multibranch 주기 스캔(자동, 지연 有) / webhook([추후]) |
+| 브랜치 커버 | 모든 브랜치·PR(기본) | Multibranch가 Jenkinsfile 있는 브랜치 자동 발견 |
 
 같은 단계를 양쪽으로 구현해, 파이프라인 설계가 도구에 종속되지 않음을 보인다.
 
@@ -74,7 +81,7 @@ docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 
 ## 5. 후속
 
-- **자동 트리거**: GitHub 웹훅 또는 SCM 폴링으로 push 시 자동 빌드([추후]).
+- **즉시 트리거**: 로컬은 주기 스캔(polling)으로 자동(지연 있음). push 즉시 빌드를 원하면 Jenkins를 외부에 노출(ngrok 등)해 GitHub webhook 연결([추후]).
 - **권한 최소화**: 소켓 직마운트 대신 DinD·소켓 프록시·전용 에이전트([추후]).
 - **배포 연계**: 빌드 후 ArgoCD가 git을 동기화(GitOps) — Jenkins는 build/test에 집중([추후]).
 
