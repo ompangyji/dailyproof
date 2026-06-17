@@ -109,6 +109,7 @@ CI(GitHub Actions·Jenkins)와 배포(Terraform·ArgoCD)를 붙이며 막혔던 
 - **진단**: `kubectl -n argocd get application … -o jsonpath` 로 보니 `operationState.phase=Running`, message=**"waiting for healthy state of …/Ingress/…-web"**. Ingress의 `status.loadBalancer={}`(ADDRESS 비어 있음).
 - **원인**: ArgoCD는 **Sync 단계 리소스가 전부 Healthy가 돼야 PostSync 단계(hook)로 넘어간다.** k3s 기본 Traefik가 **Ingress에 LB status(주소)를 발행하지 않아** Ingress가 **영원히 Progressing** → Sync 단계가 안 끝남 → **PostSync hook이 영원히 대기**. 앞서 Ingress를 추가했을 때(그땐 hook이 없어서) 드러나지 않던 **잠복 부작용**이 hook을 붙이자 터진 것.
 - **해결**: 로컬 staging에선 `values-staging.yaml`에 `ingress.enabled: false`로 **Ingress를 끔**(차트 템플릿은 유지, 실제 LB 있는 클러스터/prod에선 켬). 그러면 Sync 단계가 막힘 없이 끝나 PostSync hook이 돈다. (대안: ArgoCD `resource.customizations.health.networking.k8s.io_Ingress`로 Ingress를 Healthy로 간주 — 클러스터 설정이라 더 복잡)
+- **부수 효과(auto-prune)**: enabled=false로 바꾸자 **살아있던 Ingress가 자동 삭제**됐다. ArgoCD 앱이 `automated.prune: true`라서 **"git(desired)에서 빠진 리소스는 클러스터에서도 제거"** 하기 때문 — GitOps의 정상 동작이다(선언에서 빼면 실물도 사라짐). "겁날 수 있지만 의도된 것."
 - **교훈**: ArgoCD는 **리소스 health로 sync phase를 gate**한다. ingress controller가 LB status를 안 채우는 환경(k3s/Traefik)에선 Ingress가 영원히 Progressing → **그 뒤 단계(PostSync hook)가 통째로 막힌다.** "한 기능 추가(Ingress)가 다른 기능(자동 smoke)을 **잠복적으로** 막을 수 있다" — 그래서 health가 보장 안 되는 리소스는 환경별로 주의.
 
 ---
