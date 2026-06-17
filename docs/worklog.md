@@ -1420,3 +1420,33 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - `105-deploy-jenkins-pipeline-pass-20260617.png` — Jenkins Stages에서 빌드 #3가 4스테이지(typecheck+tests·helm lint·terraform validate·docker build) 전부 초록(SUCCESS). self-hosted Jenkins가 GitHub Actions와 동일 CI를 통과한 화면.
+
+### 5. Jenkins Multibranch Pipeline 전환
+
+**이전 상태 / 문제**
+
+- 처음 만든 Jenkins 잡은 **브랜치 하나에 고정**된 단일 Pipeline이었다. 그래서 그 브랜치를 merge 후 삭제하면 잡이 깨지고, `*/main`으로 두면 merge된 뒤에만 빌드돼 **merge 전 검사(CI 게이트) 역할을 못 했다.** 일회용 데모에 가까웠음.
+
+**목적**
+
+- **실무형 CI로 격상**. Jenkinsfile 있는 모든 브랜치를 자동 발견·빌드하는 **Multibranch Pipeline**으로 바꿔, 브랜치 삭제에 안 깨지고 merge 전 브랜치도 검사하게 한다(GitHub Actions가 브랜치/PR마다 도는 것과 동일).
+
+**한 일**
+
+- `docs/runbooks/jenkins.md`를 Multibranch 기준으로 개정 — 잡 생성을 단일 Pipeline(from SCM) → **Multibranch Pipeline**(Git 브랜치소스 + 주기 스캔)으로, 비교표·트리거 항목 갱신.
+- Jenkinsfile 자체는 변경 불필요(declarative라 Multibranch 호환). Jenkinsfile은 main에 있어 새 브랜치가 자동 상속.
+
+**핵심 설계**
+
+- 발견 기준 = **"Jenkinsfile 존재"** — 잡에 브랜치를 박지 않음. 브랜치 생성/삭제에 잡이 자동 따라옴.
+- 로컬 Jenkins는 localhost라 webhook이 안 닿아 **주기 스캔(polling)** 으로 자동화. 즉시 트리거는 외부 노출(webhook) 후속.
+
+**비고 / 검증 방법**
+
+- 문서 개정 완료.
+- **실측**: Jenkins UI에서 Multibranch Pipeline 잡(`devops DailyProof`) 생성 → 자동 스캔으로 **`main` 브랜치 발견**(Jenkinsfile 존재) → 빌드 #1 **SUCCESS(초록)**. 단일 잡(브랜치 고정) → 브랜치 자동 발견형으로 전환 확인.
+
+**자료**
+
+- `106-deploy-jenkins-multibranch-branches-20260617.png` — Multibranch 잡이 `main` 브랜치를 자동 발견(Branches 1) + 빌드 성공(초록).
+- `107-deploy-jenkins-multibranch-main-build-20260617.png` — `devops DailyProof/main` 하위 잡 #1 SUCCESS(독립 빌드).
