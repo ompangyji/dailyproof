@@ -1510,4 +1510,5 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **비고 / 검증 방법**
 
 - `helm lint`·`template`(Job+hook annotation) + 실 k3s server-side dry-run(7개 리소스, postsync-smoke Job 포함) 통과.
-- 실제 hook 실행(ArgoCD sync 시 Job 자동 생성·smoke 통과/실패)은 ArgoCD에서 sync 후 확인(증거 캡처). 진행 중 이슈는 회고에 정리.
+- **진행 중 이슈(해결)**: hook을 붙였더니 sync가 hang하고 smoke Job이 안 생김 → 진단 결과 ArgoCD가 **Ingress가 Healthy가 될 때까지 Sync 단계에서 대기**(k3s Traefik가 Ingress LB status 미발행 → 영원히 Progressing) → PostSync 단계가 막힘. **해결**: `values-staging.yaml`에 `ingress.enabled: false`(로컬 staging 한정, 차트 템플릿은 유지). 상세는 회고 `retrospective/cicd-gitops.md` §8.
+- 실제 hook 실행(sync 시 smoke Job 자동 생성·통과)은 위 fix 후 ArgoCD sync에서 확인(증거 캡처 예정).
