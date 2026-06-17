@@ -289,7 +289,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **한 일**
 
-- `docs/architecture/branching.md` 작성: 코드 작업 본격 시작 전에 브랜치 모델을 먼저 고정. 후보(GitHub Flow+환경 승격 / 트렁크 기반 / Git Flow) 비교 → **GitHub Flow + 환경 승격** 채택. 브랜치 구조·명명 규칙(`feature/*`·`fix/*`·`docs/*`·`chore/*`), 흐름(mermaid), PR·머지 규칙, 환경 분리 매핑, 적용 방침을 한 문서로 정리.
+- `docs/architecture/branching.md` 작성: 코드 작업 본격 시작 전에 브랜치 모델을 먼저 고정. 후보(GitHub Flow+환경 승격 / 트렁크 기반 / Git Flow) 비교 → **GitHub Flow + 환경 승격** 채택. 브랜치 구조·명명 규칙(`feature/*`·`fix/*`·`docs/*`·`chore/*`), 흐름(mermaid), PR·merge 규칙, 환경 분리 매핑, 적용 방침을 한 문서로 정리.
 - `docs/README.md` 인덱스에 `branching.md` 추가.
 
 **핵심 결정 — GitHub Flow + 환경 승격 채택**
@@ -1299,3 +1299,36 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `terraform fmt`/`init`/`validate` 통과(helm provider 2.17). drvfs chmod 제약으로 init이 막혀 **WSL 네이티브 경로에서 검증**.
 - **실 k3s 대상 `terraform plan` → `Plan: 1 to add`**(helm_release 생성, outputs dp/dailyproof/deployed) — apply-ready 확인.
 - **실측(IaC 실증)**: 이미지를 `:staging` 태그로 k3s containerd에 import 후 `terraform apply` → **`Apply complete! Resources: 1 added`**, `release_status = "deployed"`. `kubectl get pods -n dailyproof` → `dp-dailyproof-web`·`dp-dailyproof-worker` 모두 **`1/1 Running`** = Terraform이 로컬 k3s에 차트를 실제 배포하고 파드가 기동됨(helm install 직접이 아니라 IaC로 관리).
+
+**자료**
+
+- `101-deploy-terraform-apply-pods-running-20260617.png` — `terraform output`(release_status=deployed) + `kubectl get pods -n dailyproof`에서 web·worker 모두 1/1 Running. Terraform이 띄운 파드가 실제 가동 중인 화면.
+
+## 2026-06-17
+
+### 1. GitHub Actions CI (build/test/validate)
+
+**이전 상태 / 문제**
+
+- 그동안 검사를 사람이 손으로 돌렸다 — tsc·테스트·helm lint·terraform validate를 기억해서 실행. 자동 게이트가 없어 **깨진 코드/매니페스트가 merge될 수 있고**, 검증이 일관되지 않았다. (Notion sync 워크플로는 있었지만 코드 검증 CI는 없음.)
+
+**목적**
+
+- **PR마다 자동으로 도는 merge gate**. push/PR 시 코드(타입·테스트)·매니페스트(helm·terraform)·이미지(docker build)를 자동 검증해, 통과해야만 merge되도록 한다.
+
+**한 일**
+
+- `.github/workflows/ci.yml` 작성 — 3개 잡: **quality**(tsc 타입체크·`npm test`), **manifests**(helm lint + staging/prod 렌더, terraform fmt/init/validate), **images**(worker·web docker build).
+- web 이미지는 빌드 시 인라인되는 `NEXT_PUBLIC_*`에 더미 공개값을 build-arg로 넣어 빌드만 검증(시크릿 불필요).
+- 트리거: `pull_request`(merge gate) + main `push`. concurrency로 중복 실행 취소.
+
+**핵심 설계**
+
+- ESLint는 아직 미설정이라 `next lint`가 대화형으로 멈춘다 → CI 정적 검사는 **tsc 타입체크로 대체**(lint 도입은 후속).
+- 같은 CI 단계를 이후 **Jenkins 파이프라인에서 미러링** → 관리형/self-hosted 양쪽 실증.
+
+**비고 / 검증 방법**
+
+- 로컬 선검증(docker 제외): YAML 파싱 OK, `tsc` exit 0, `npm test` fail 0, `helm lint`+staging/prod 렌더 OK, `terraform fmt -check` OK.
+- web 빌드 안전성 확인: 홈·동적 라우트가 `cookies()`/server client로 **동적 렌더**라 static 생성 시 Supabase 미호출 → 더미 공개값 빌드 가능.
+- 실제 CI green은 push 후 GitHub Actions 결과로 확인(증거 캡처).
