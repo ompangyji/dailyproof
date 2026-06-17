@@ -1512,3 +1512,8 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `helm lint`·`template`(Job+hook annotation) + 실 k3s server-side dry-run(7개 리소스, postsync-smoke Job 포함) 통과.
 - **진행 중 이슈(해결)**: hook을 붙였더니 sync가 hang하고 smoke Job이 안 생김 → 진단 결과 ArgoCD가 **Ingress가 Healthy가 될 때까지 Sync 단계에서 대기**(k3s Traefik가 Ingress LB status 미발행 → 영원히 Progressing) → PostSync 단계가 막힘. **해결**: `values-staging.yaml`에 `ingress.enabled: false`(로컬 staging 한정, 차트 템플릿은 유지). 상세는 회고 `retrospective/cicd-gitops.md` §8.
 - **실측 성공**: fix 후 sync에서 **PostSync smoke Job 자동 생성 → `post-deploy smoke OK` → Completed**(`dailyproof-staging-dailyproof-postsync-smoke-…`). 이제 sync마다 배포 후 smoke가 자동 게이트. (부수: Ingress는 `ingress.enabled=false` + auto-prune로 자동 삭제 — 회고 §8)
+- merge 후 ArgoCD revision을 다시 `main`으로 되돌려(`argocd app set … --revision main`) 재동기화 → `Synced to main (844d89d)`, `Health: Healthy`, sync `Phase: Succeeded`(11s)에서 PostSync hook이 `Running → Succeeded`로 자동 실행됨을 재확인.
+
+**자료**
+- `113-deploy-postsync-smoke-ok-20260618.png` — PostSync smoke Job `Completed` + 로그 `post-deploy smoke OK`(자동 hook 실행 결과).
+- `114-deploy-argocd-postsync-synced-main-20260618.png` — ArgoCD UI: `main(844d89d)` 기준 `Synced/Healthy`, 리소스 트리에 PostSync smoke 포함(main 추적 복귀 + 배포 후 자동 smoke).
