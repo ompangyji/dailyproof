@@ -16,6 +16,7 @@
 | `docs/architecture/` | 현재/목표 아키텍처, 데이터 흐름, 환경 분리 전략 |
 | `docs/runbooks/` | 운영 절차, 헬스체크/복구, 롤백 가이드 |
 | `docs/incidents/` | 장애 재현 기록, incident report |
+| `docs/retrospective/` | 트러블슈팅 회고 (막힌 지점·원인·해결·교훈) |
 | `docs/performance/` | 부하 테스트 결과, 병목 분석 |
 | `docs/screenshots/` | 대시보드/trace 캡처 등 증거 자료 (로컬 보관용, **git 미추적** — `.gitignore` 처리) |
 
@@ -94,5 +95,10 @@
 - [x] `runbooks/local-stack.md` — docker-compose 로컬 스택 구동·smoke test·트러블슈팅
 - [x] `runbooks/k8s-deploy.md` — Helm 차트 구조·env별 values·시크릿 주입·렌더/검증/적용
 - [x] `runbooks/argocd.md` — ArgoCD GitOps(pull) 설치·repo 크리덴셜·Application 동기화·UI
+- [x] `runbooks/jenkins.md` — self-hosted Jenkins 파이프라인(Jenkinsfile, GitHub Actions와 동일 검사)
+- [x] `retrospective/cicd-gitops.md` — CI/CD·GitOps 트러블슈팅 회고(증상·원인·해결·교훈)
+- [x] `retrospective/wsl-drvfs.md` — WSL/drvfs 환경 제약 회고(chmod·CRLF·EPERM 빌드·pathspec)
+- [x] `retrospective/async-pipeline.md` — 비동기 파이프라인 회고(유령 job·잘린 키·지연 폭발·trace_id null)
+- [x] `retrospective/notion-sync.md` — Notion sync 회고(거대 문서 타임아웃·병렬 삭제·재시도)
 - [ ] `incidents/incident-log.md` — 장애 재현 기록
 - [ ] `performance/performance.md` — 성능 테스트 결과

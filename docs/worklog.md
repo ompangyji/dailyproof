@@ -1390,3 +1390,33 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `helm lint` 통과. `helm template` → 리소스에 **Ingress 포함**(host `dailyproof.local`→web:3000). **실 k3s server-side dry-run**: `ingress.networking.k8s.io/dp-dailyproof-web created (server dry run)` 포함 6개 리소스 통과.
 - 실제 호스트 접속(http://dailyproof.local)·TLS는 로컬 /etc/hosts 매핑·[추후].
+
+### 4. Jenkins 파이프라인 실증 (self-hosted CI)
+
+**이전 상태 / 문제**
+
+- CI가 GitHub Actions(관리형) 하나뿐이었다. 채용 시장엔 **Jenkins(self-hosted)**를 쓰는 곳이 많은데, "GitHub Actions로 만든 파이프라인이 Jenkins로도 된다"를 실물로 보여줄 게 없었다. (둘은 개념이 같지만 Jenkins는 CI 인프라 운영까지 포함)
+
+**목적**
+
+- **같은 CI를 Jenkins로 미러링**. GitHub Actions의 검사(typecheck·test·helm·terraform·docker build)를 그대로 Jenkins 선언형 파이프라인으로 구현해, 관리형/self-hosted **양쪽으로 같은 파이프라인을 설계**했음을 보인다.
+
+**한 일**
+
+- repo 루트에 **`Jenkinsfile`**(declarative) 작성 — `ci.yml`과 동일 4스테이지. 각 스테이지를 도구 이미지(node:22 / alpine/helm / hashicorp/terraform / docker:cli) 컨테이너 에이전트로 실행(컨트롤러에 도구 설치 불필요). `agent none`이라 스테이지마다 `checkout scm`으로 소스 확보, docker build는 호스트 소켓 공유.
+- `docs/runbooks/jenkins.md` — 로컬 Jenkins 실행(Docker+소켓+Docker Pipeline 플러그인), private repo 자격증명, Pipeline(from SCM) 잡 생성·실행, GitHub Actions와의 비교, 후속(웹훅·권한 최소화). README 인덱스 추가.
+
+**핵심 설계**
+
+- **같은 검사를 두 도구로** → 파이프라인 설계가 특정 CI 도구에 종속되지 않음을 입증. GitHub Actions=관리형, Jenkins=self-hosted(인프라 운영 포함).
+- 스테이지별 컨테이너 에이전트로 "도구는 컨테이너가 들고 옴" 패턴 — Jenkins 컨트롤러는 Docker 접근만 필요.
+
+**비고 / 검증 방법**
+
+- 동일 검사 항목은 GitHub Actions CI에서 이미 green 확인됨(typecheck·test·helm·terraform·docker build). Jenkinsfile은 그 단계를 그대로 미러링.
+- **실측**: 로컬 Jenkins(Docker, 소켓 공유) 기동 → Pipeline(from SCM) 빌드 → **4스테이지 전부 green(빌드 #3, SUCCESS)**. 도중 `alpine/helm`·`hashicorp/terraform`이 ENTRYPOINT가 도구라 Jenkins의 `cat`이 안 돌아 실패 → docker 에이전트에 **`--entrypoint=`** 로 해결(수정 후 통과). 소켓 직마운트·`-u root`는 로컬 데모 단순화 — 권한 최소화는 후속.
+- 트리거: 로컬 Jenkins는 localhost라 GitHub webhook이 닿지 않음(즉시 자동 불가) → 자동은 Poll SCM, 또는 Build Now 수동. (관리형 GitHub Actions는 push/PR 즉시 자동 — self-hosted와의 차이)
+
+**자료**
+
+- `105-deploy-jenkins-pipeline-pass-20260617.png` — Jenkins Stages에서 빌드 #3가 4스테이지(typecheck+tests·helm lint·terraform validate·docker build) 전부 초록(SUCCESS). self-hosted Jenkins가 GitHub Actions와 동일 CI를 통과한 화면.
