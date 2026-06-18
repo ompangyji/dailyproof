@@ -72,9 +72,8 @@ jobs:
         uses: aquasecurity/trivy-action@0.29.0
         with:
           scan-type: fs
-          format: cyclonedx
+          format: cyclonedx # SBOM 포맷 → 패키지 인벤토리(부품표). 취약점 판정은 위 trivy 잡 담당
           output: sbom.cdx.json
-          scanners: license # 부품표만 — 취약점은 위 trivy 잡에서
       - uses: actions/upload-artifact@v4
         with:
           name: sbom-cyclonedx
