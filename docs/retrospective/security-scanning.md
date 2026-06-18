@@ -46,6 +46,49 @@
 - 결과는 **SARIF로 GitHub Security 탭**에 모으고, 게이트는 **soft(경보)로 베이스라인 → hard(fail) 전환**(처음부터 hard면 기존 취약점에 막힘).
 - 도구 출력에 통제ID가 붙으니, 그게 `docs/security/controls-mapping.md`(통제↔구현↔검증)의 근거가 된다.
 
+## 도구 범위는 어떻게 정했나 — 계층과 우리 선택
+
+도구는 카테고리별로 많다. "다 하기"가 아니라 환경·목적에 맞는 지점을 골랐다.
+
+| 단계 | 도구 | 커버 |
+|---|---|---|
+| **진짜 최소** | trivy 하나 | CVE + IaC 오설정 + 시크릿 (한 도구로 3영역) |
+| **권장 베이스라인(우리 선택)** | + gitleaks + Dependabot + CodeQL | 시크릿 히스토리 + 의존성 자동 업데이트 + 소스 SAST |
+| **표준+** | + syft/SBOM · cosign(이미지 서명) · kube-bench(런타임 CIS) | 공급망 |
+| **포괄(엔터프라이즈)** | + OWASP ZAP(DAST) · OPA/Kyverno(정책 강제) · Falco(런타임 위협탐지) | 실행 중 보안 |
+
+→ trivy 단독이 진짜 최소, 우리는 거기에 시크릿 히스토리·의존성·SAST를 더한 **흔한 CI 보안 기본 세트 + SBOM**. (실측 근거: 첫 trivy 스캔에서 CVE 0, IaC 오설정 KSV-0014 ×3, 로컬 시크릿 1건 — `docs/security/scans/`.)
+
+## 나머지 카테고리를 지금 안 하는 이유
+
+필요 없어서가 아니라, **이 환경에서 지금 하면 ROI가 낮은 구체적 이유**가 있다.
+
+| 카테고리(도구) | 왜 지금 보류 | 판정 |
+|---|---|---|
+| DAST (OWASP ZAP) | 떠 있는 앱을 HTTP로 공격 테스트 → 우리 앱은 로그인 벽 + 시드 데이터 없음, 로컬 k3s/WSL 네트워크 불안정 | 안정적 호스팅 생기면 |
+| 이미지 서명 (cosign) | 서명은 **검증하는 쪽**(레지스트리+admission controller)이 있어야 의미. k3s는 로컬 import라 검증 루프 없음 | 레지스트리 도입 시 |
+| 런타임 CIS (kube-bench) | 클러스터(control plane·kubelet)를 감사 → k3s 번들 구조라 대부분 우리가 못 바꾸는 내부. 매니페스트 CIS는 trivy config가 이미 봄 | trivy로 충분 |
+| 정책 강제 (OPA/Kyverno) | 같은 체크를 trivy config가 CI에서 미리 함(shift-left). 런타임 강제는 클러스터 컴포넌트 추가가 필요한 다음 레벨 | 스트레치 |
+| 런타임 위협탐지 (Falco) | 실행 중 컨테이너 악성행위 탐지(syscall) = 운영/SOC 도구. 실트래픽 없는 포트폴리오엔 과함 | 이름만 |
+
+**원리 둘:**
+1. **shift-left 먼저** — "배포 전(CI)에 잡는" 계층(SCA·SAST·시크릿·IaC)을 먼저 완성. DAST·kube-bench·Falco·OPA는 "실행 중/런타임" 계층이라 **안정적 클러스터·트래픽·레지스트리가 전제** — 로컬 k3s/WSL에선 그 전제가 약하다.
+2. **반쪽 여러 개보다, 몇 개를 제대로 + 나머지는 "왜 안 하는지 설명할 줄 아는 것"** 이 더 강하다. "Falco 돌렸다(껍데기)"보다 "런타임 탐지는 SOC 영역이라 이 단계엔 shift-left에 집중했다"가 신뢰감을 준다.
+
+## 참고 — 영역·검색 키워드
+
+각 카테고리에 도구가 매핑된다. 카테고리 키워드로 검색하면 "어떤 영역이 있고 도구가 뭔지"가 한눈에 잡힌다.
+
+- **SCA**(software composition analysis) — 의존성 CVE: trivy, grype, dependabot
+- **SAST**(static application security testing) — 소스 코드: CodeQL, semgrep
+- **DAST**(dynamic ...) — 실행 중 앱: OWASP ZAP
+- **secret scanning** — gitleaks, trufflehog
+- **IaC security scanning** — trivy config, checkov, tfsec, kics
+- **container image scanning** — trivy, grype
+- **SBOM**(software bill of materials) · **SLSA**(supply chain) — syft, trivy
+- **Kubernetes CIS benchmark** — kube-bench · **policy as code** — OPA, Kyverno
+- 큰 그림/성숙도: `DevSecOps pipeline`, `shift-left security`, `OWASP DSOMM`, `NIST SSDF`
+
 ## 교훈
 
 - **"표준 자료를 읽는 일"과 "규칙을 수행하는 일"은 다른 층이다.** 자료는 이해·매핑용, 수행은 도구가. 사람이 표준을 손으로 옮기는 건 (B) 정책룰을 만드는 *메인테이너*의 몫이고, 사용자는 그 결과를 끌어다 쓴다.
