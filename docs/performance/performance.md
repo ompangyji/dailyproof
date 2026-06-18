@@ -37,6 +37,23 @@ K6_SUMMARY=docs/performance/results/baseline.json \
 ```
 옵션: `-e VUS=20`(동시 가상 유저), `-e DURATION=20s`(시나리오당 시간).
 
+## 사용한 명령어 (무엇을 / 왜)
+
+측정 → 개선 → 재측정에 쓴 명령을 순서대로 정리한다(값은 자리표시자).
+
+| 명령 | 무엇을 | 왜 |
+|------|--------|-----|
+| `k6 version` | 설치 확인 | k6는 단독 CLI(Grafana 대시보드 불필요) — 바이너리만 있으면 됨 |
+| `kubectl -n dailyproof-staging port-forward svc/...-web 3000:3000` | staging web을 로컬 3000으로 | 로컬 빌드가 drvfs에서 막혀, 떠 있는 staging pod를 대상으로 측정 |
+| `K6_SUMMARY=...json k6 run -e BASE_URL=... scripts/load/baseline.js \| tee ...txt` | 부하 실행 + 결과 저장 | 콘솔 요약(tee)·전체 메트릭(JSON) 둘 다 남겨 표/비교 근거로 |
+| `k6 run -e VUS=5 ...` | 저부하 재실행 | "낮은 동시성=정상, 임계점에서 붕괴"를 보여 병목이 동시성임을 확증 |
+| `docker build -f Dockerfile.web --build-arg NEXT_PUBLIC_SUPABASE_URL=... --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=... -t dailyproof-web:staging .` | 개선 코드로 web 이미지 재빌드 | `/metrics`가 `NEXT_PUBLIC_*`를 빌드 때 인라인 → 코드 바꾸면 재빌드 필수. docker 빌드는 컨테이너 내부라 drvfs 무관 |
+| `docker save dailyproof-web:staging \| sudo k3s ctr images import -` | 이미지를 k3s containerd로 주입 | k3s는 레지스트리 pull 없이 로컬 import 이미지를 `IfNotPresent`로 사용 |
+| `kubectl -n dailyproof-staging delete pod -l app.kubernetes.io/component=web` | web pod 교체 | 같은 `:staging` 태그라 재생성 시 새로 import한 이미지로 뜸(ArgoCD는 삭제를 재생성으로 메움) |
+| `kubectl -n dailyproof-staging rollout status deploy/...-web` | 롤아웃 완료 대기 | 새 pod가 Ready 된 뒤 재측정하려고 |
+
+> 공개값(`NEXT_PUBLIC_*`)만 build-arg로 쓴다. **`SUPABASE_SERVICE_ROLE_KEY`(시크릿)는 절대 빌드/명령에 넣지 않는다.**
+
 ## threshold (성능 기준 = run 합/불)
 
 `scripts/load/baseline.js`에 박아 둔 기준:
