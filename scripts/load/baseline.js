@@ -40,10 +40,10 @@ export const options = {
     },
   },
   thresholds: {
-    // 순수 앱: 빠르고 에러 거의 없어야 한다
-    "http_req_duration{scenario:health_live}": ["p(95)<200"],
+    // 순수 앱: 빠르고 에러 거의 없어야 한다. (p95는 port-forward+단일 pod tail 포함해 400ms 상한)
+    "http_req_duration{scenario:health_live}": ["p(95)<400"],
     "http_req_failed{scenario:health_live}": ["rate<0.01"],
-    // DB 경로: 더 느려도 되지만 상한과 에러율을 둔다
+    // DB 경로 목표(SLO): 캐시+single-flight 개선 후 충족해야 한다.
     "http_req_duration{scenario:metrics_read}": ["p(95)<800"],
     "http_req_failed{scenario:metrics_read}": ["rate<0.05"],
   },

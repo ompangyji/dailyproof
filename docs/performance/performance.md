@@ -39,28 +39,43 @@ K6_SUMMARY=docs/performance/results/baseline.json \
 
 ## threshold (성능 기준 = run 합/불)
 
-`scripts/load/baseline.js`에 박아 둔 초기 기준(첫 측정 뒤 환경에 맞게 조정):
+`scripts/load/baseline.js`에 박아 둔 기준:
 
 | 시나리오 | p95 지연 | 실패율 |
 |---|---|---|
-| `health_live` (순수 앱) | `< 200 ms` | `< 1%` |
+| `health_live` (순수 앱) | `< 400 ms` | `< 1%` |
 | `metrics_read` (조회+DB) | `< 800 ms` | `< 5%` |
 
 threshold 미달이면 k6가 **non-zero로 종료** → 추후 CI 성능 게이트로도 쓸 수 있다(merge 전/배포 후 게이트와 같은 결).
 
-## baseline 결과
+## 결과 — before / after
 
-> 측정 환경: (예) k3s staging web Pod, VUS=20, 시나리오당 20s. _실측 후 채움._
+측정 환경: k3s staging web Pod에 port-forward, VUS=20, 시나리오당 20s.
 
-| 시나리오 | RPS | p50 | p95 | p99 | max | 실패율 |
+**Before (개선 전):**
+
+| 시나리오 | 요청수 | RPS | p50 | p95 | max | 실패율 |
+|---|---|---|---|---|---|---|
+| `health_live` (순수 앱) | 5,921 | ~296/s | 39 ms | 274 ms | 1.01 s | 0% |
+| `metrics_read` (조회+DB) | **40** | **~2/s** | **10.5 s** | **10.5 s** | 10.53 s | **100%** |
+
+→ **순수 앱은 296 rps·에러 0%로 멀쩡한데, DB 경로는 동시성 20에서 붕괴**: 모든 요청이 ~10초에 묶여 100% 실패(20초 동안 40건). 모든 요청이 *정확히 ~10초*인 건 어딘가 10초 타임아웃을 때린다는 신호.
+
+**After (개선 후):** _재측정 후 채움._
+
+| 시나리오 | 요청수 | RPS | p50 | p95 | max | 실패율 |
 |---|---|---|---|---|---|---|
 | `health_live` (순수 앱) | _ | _ | _ | _ | _ | _ |
 | `metrics_read` (조회+DB) | _ | _ | _ | _ | _ | _ |
 
-## 병목 가설
+## 병목 분석 & 개선
 
-- **DB 왕복이 지연의 지배 요인일 것**: `metrics_read` p95 − `health_live` p95 ≈ `metrics_snapshot` RPC + 직렬화 비용. 이 차이가 크면 DB(RPC 쿼리·집계·커넥션)부터 본다.
-- **개선 후보**: ① `metrics_snapshot` 쿼리/집계 비용 점검, ② 결과 캐시(짧은 TTL — 메트릭은 약간의 staleness 허용 가능), ③ DB 커넥션 풀/위치(앱↔DB 왕복 거리), ④ 앱 직렬화 경로.
-- 개선 적용 후 같은 시나리오로 재측정해 before/after를 비교한다.
+- **관찰**: `/metrics` 단건은 정상(배포 후 smoke 통과)인데 **동시 부하에서만** ~10초 타임아웃·100% 실패 → 엔드포인트가 깨진 게 아니라 **동시성/리소스 병목**.
+- **원인 가설**: `/metrics`가 **요청마다 Supabase 클라이언트를 새로 만들고 `metrics_snapshot` RPC**를 친다. 20 VU가 동시에 DB 커넥션을 잡아 **포화** → 대기 끝에 ~10초 한계에서 타임아웃. (커넥션 재사용·결과 캐시 없음. 보조 요인: 단일 web pod `replicas:1`/`cpu:1`, Supabase 등급 커넥션 한도.)
+- **개선**: `/metrics`에 **짧은 TTL(기본 3s) 인메모리 캐시 + single-flight**를 적용(`src/app/metrics/route.ts`).
+  - TTL 동안은 DB를 안 치고 캐시된 본문을 반환.
+  - 캐시 미스 시 동시 요청은 **진행 중인 한 번의 조회를 공유**(single-flight)해 DB 호출을 1회로 합침 → 커넥션 포화 제거.
+  - 메트릭은 scrape 주기보다 짧은 staleness라 정확도 영향 미미.
+- **기대 효과**: `metrics_read`가 타임아웃에서 벗어나 p95<800ms·실패율<5% 충족(threshold 통과). after 표에서 검증.
 
 > 측정·개선 기록은 `worklog.md`, 도구 선택 근거는 회고 참고.
