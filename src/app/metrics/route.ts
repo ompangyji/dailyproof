@@ -19,12 +19,15 @@ function gauge(name: string, help: string, by: Record<string, number> | undefine
 
 const TEXT_HEADERS = { "Content-Type": "text/plain; version=0.0.4; charset=utf-8", "Cache-Control": "no-store" };
 
-// 짧은 TTL 인메모리 캐시 + single-flight.
-// 부하 측정에서 매 요청이 metrics_snapshot RPC를 직접 쳐 동시성 20VU에 DB 커넥션이 포화 →
-// 모든 요청이 ~10s 타임아웃·100% 실패했다. TTL 동안 결과를 재사용하고, 캐시 미스 시
-// 동시 요청은 '진행 중인 한 번의 조회'를 공유(single-flight)해 DB 호출을 1회로 합친다.
-// (메트릭은 약간의 staleness를 허용 가능 — scrape 주기보다 짧게 둔다.)
+// 부하 진단 결과: 쿼리(3.6ms)·REST API(~130ms)는 빠른데 앱 pod에서 나가는 RPC만 ~10초로 굳었다.
+// (pod의 Supabase 연결이 stale해진 keep-alive를 재사용하다 소켓 타임아웃을 때리는 패턴)
+// → ① 짧은 TTL 캐시 + single-flight로 동시 부하의 DB 폭증을 막고,
+//    ② rpc에 fail-fast 타임아웃을 걸어 행을 2초에 끊고(다음 호출은 새 연결로 자가복구),
+//    ③ 신선화 실패 시 직전 정상값(stale)을 반환해 /metrics가 10초 행 없이 살아 있게 한다.
 const TTL_MS = Number(process.env.METRICS_CACHE_TTL_MS ?? 3000);
+const RPC_TIMEOUT_MS = Number(process.env.METRICS_RPC_TIMEOUT_MS ?? 2000);
+const STALE_MAX_MS = Number(process.env.METRICS_STALE_MAX_MS ?? 30000);
+
 let cache: { at: number; body: string } | null = null;
 let inflight: Promise<string> | null = null;
 
@@ -34,22 +37,29 @@ async function buildSnapshotBody(): Promise<string> {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     { auth: { persistSession: false } },
   );
-  const { data, error } = await sb.rpc("metrics_snapshot");
-  if (error || !data) throw new Error(error?.message ?? "metrics_snapshot: no data");
+  // fail-fast: 행 걸린 연결을 RPC_TIMEOUT_MS에 abort → 그 소켓을 버리고 다음 호출은 새 연결로.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+  try {
+    const { data, error } = await sb.rpc("metrics_snapshot").abortSignal(controller.signal);
+    if (error || !data) throw new Error(error?.message ?? "metrics_snapshot: no data");
 
-  const snap = data as {
-    jobs?: Record<string, number>;
-    assets?: Record<string, number>;
-    job_processing_seconds_avg?: number;
-  };
-  return [
-    ...gauge("dailyproof_jobs_total", "Jobs by status (pending = queue depth)", snap.jobs, JOB_STATUSES),
-    ...gauge("dailyproof_assets_total", "Proof assets by status (failed = upload/처리 실패)", snap.assets, ASSET_STATUSES),
-    "# HELP dailyproof_job_processing_seconds_avg Recent avg job processing time claim→done (seconds), approx",
-    "# TYPE dailyproof_job_processing_seconds_avg gauge",
-    `dailyproof_job_processing_seconds_avg ${snap.job_processing_seconds_avg ?? 0}`,
-    "",
-  ].join("\n");
+    const snap = data as {
+      jobs?: Record<string, number>;
+      assets?: Record<string, number>;
+      job_processing_seconds_avg?: number;
+    };
+    return [
+      ...gauge("dailyproof_jobs_total", "Jobs by status (pending = queue depth)", snap.jobs, JOB_STATUSES),
+      ...gauge("dailyproof_assets_total", "Proof assets by status (failed = upload/처리 실패)", snap.assets, ASSET_STATUSES),
+      "# HELP dailyproof_job_processing_seconds_avg Recent avg job processing time claim→done (seconds), approx",
+      "# TYPE dailyproof_job_processing_seconds_avg gauge",
+      `dailyproof_job_processing_seconds_avg ${snap.job_processing_seconds_avg ?? 0}`,
+      "",
+    ].join("\n");
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function GET(req: Request) {
@@ -62,7 +72,7 @@ export async function GET(req: Request) {
   }
 
   // 2) 캐시 미스 — 동시 요청은 같은 in-flight 조회를 공유한다(single-flight).
-  //    (JS 단일 스레드라 아래 check→assign 사이엔 await가 없어 첫 요청만 조회를 시작한다.)
+  //    (JS 단일 스레드라 check→assign 사이엔 await가 없어 첫 요청만 조회를 시작한다.)
   try {
     if (!inflight) {
       inflight = buildSnapshotBody().finally(() => {
@@ -73,6 +83,11 @@ export async function GET(req: Request) {
     cache = { at: Date.now(), body };
     return new NextResponse(body, { status: 200, headers: TEXT_HEADERS });
   } catch (e) {
+    // 3) 신선화 실패 — 직전 정상값(stale)이 너무 오래되지 않았으면 그걸로 응답(10초 행보다 낫다).
+    if (cache && Date.now() - cache.at < STALE_MAX_MS) {
+      log.warn("metrics 신선화 실패 — stale 캐시 반환", { error: (e as Error).message });
+      return new NextResponse(cache.body, { status: 200, headers: { ...TEXT_HEADERS, "X-Metrics-Stale": "1" } });
+    }
     log.warn("metrics 수집 실패", { error: (e as Error).message });
     return new NextResponse(`# metrics unavailable\n`, {
       status: 503,
