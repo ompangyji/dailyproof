@@ -2,6 +2,14 @@
 
 API 부하를 **k6**로 측정해 baseline을 남긴다. Lighthouse 같은 프론트 점수가 아니라 **실제 API의 처리량/지연/실패율**을 본다.
 
+## 왜 k6 (도구 선택)
+
+부하 도구는 JMeter·k6·nGrinder·Locust·autocannon 등이 있다. 이 작업엔 **k6**를 골랐다.
+
+- **autocannon**(처음 후보): npx로 즉석 실행·Node 네이티브라 마찰이 적지만, 경량 마이크로벤치라 **시나리오·threshold·램프업이 약하고** "표준 부하도구를 다룬다"는 신호도 약하다.
+- **JMeter/Locust/nGrinder**: 다단계 시나리오·분산 대규모 부하엔 강하지만 이 작업(단순 GET 2경로 baseline)엔 과하다.
+- **k6**: JS로 시나리오 작성, **threshold(p95·실패율 미달 시 run 실패 = 성능 게이트)**, 시차 실행, 단일 바이너리(로컬 설치 쉬움, drvfs 빌드 이슈와 무관). baseline + "성능 기준을 코드로 강제"에 가장 잘 맞아 선택.
+
 ## 왜 / 무엇을
 
 - 단순 GET 두 경로를 **대비**해, "DB 의존이 더하는 지연"을 분리해서 본다.
@@ -53,6 +61,42 @@ K6_SUMMARY=docs/performance/results/baseline.json \
 | `kubectl -n dailyproof-staging rollout status deploy/...-web` | 롤아웃 완료 대기 | 새 pod가 Ready 된 뒤 재측정하려고 |
 
 > 공개값(`NEXT_PUBLIC_*`)만 build-arg로 쓴다. **`SUPABASE_SERVICE_ROLE_KEY`(시크릿)는 절대 빌드/명령에 넣지 않는다.**
+
+## 병목 진단에 쓴 명령어
+
+`/metrics`의 ~10초 행이 "쿼리/REST API/앱-pod 경로" 중 어디인지 가르는 데 쓴 명령(3-way) + 출렁임 확인용 반복 측정.
+
+```sql
+-- ① 쿼리 자체가 무거운가? (Supabase SQL Editor) → 결과 3.6ms = 쿼리는 안 무겁다
+explain analyze select metrics_snapshot();
+```
+```bash
+# ② Supabase REST(PostgREST)가 느린가? (개발자 머신에서 직접) → ~130ms = REST도 멀쩡
+curl -s -o /dev/null -w "http %{http_code}  time %{time_total}s\n" -X POST \
+  "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/metrics_snapshot" \
+  -H "apikey: $NEXT_PUBLIC_SUPABASE_ANON_KEY" \
+  -H "Authorization: Bearer $NEXT_PUBLIC_SUPABASE_ANON_KEY" \
+  -H "Content-Type: application/json" -d '{}'
+
+# ③ 클러스터 '안'에서 같은 경로로 반복 호출 → 시간이 들쭉날쭉하면 pod↔Supabase 네트워크 행
+kubectl -n dailyproof-staging run netcheck --rm -i --restart=Never --image=curlimages/curl -- \
+  sh -c 'for i in $(seq 1 30); do curl -s -o /dev/null -w "%{time_total}s\n" -X POST \
+    "'"$NEXT_PUBLIC_SUPABASE_URL"'/rest/v1/rpc/metrics_snapshot" \
+    -H "apikey: '"$NEXT_PUBLIC_SUPABASE_ANON_KEY"'" \
+    -H "Authorization: Bearer '"$NEXT_PUBLIC_SUPABASE_ANON_KEY"'" \
+    -H "Content-Type: application/json" -d "{}"; sleep 1; done'
+
+# ④ 부하 무관 '출렁임' 확인 — VUS=20 반복(통과↔부분↔100%실패가 섞이면 환경성)
+for n in 3 4 5; do
+  K6_SUMMARY=docs/performance/results/after$n.json \
+    k6 run -e BASE_URL=http://127.0.0.1:3000 scripts/load/baseline.js \
+    | tee docs/performance/results/after$n.txt \
+    | sed 's/\x1b\[[0-9;]*m//g' | grep -E 'scenario:metrics_read|scenario:health_live'
+done
+# 저부하 대조: -e VUS=5 로도 실행
+```
+
+> 판독: ①②가 빠른데 ③(또는 앱 경유)만 느리면 → 범인은 **앱 pod ↔ Supabase 네트워크 경로**.
 
 ## threshold (성능 기준 = run 합/불)
 
