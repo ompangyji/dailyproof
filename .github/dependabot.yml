@@ -1,0 +1,21 @@
+# 의존성 자동 업데이트(CVE 포함). 새 취약점/버전이 나오면 Dependabot이 PR을 연다.
+# 취약점 관리 통제(ISO A.8.8, ISMS-P 취약점 점검)의 자동화 축.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # 패치/마이너는 한 PR로 묶어 노이즈를 줄인다.
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

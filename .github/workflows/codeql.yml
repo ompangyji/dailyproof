@@ -1,0 +1,28 @@
+# CodeQL: 소스 코드 정적 분석(SAST). 알려진 취약 패턴(CWE/OWASP)을 코드에서 찾아
+# GitHub Security 탭에 보고한다. JS/TS는 빌드 불필요(인터프리터).
+# 안전한 개발 통제(ISO A.8.28) 축.
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 0 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: CodeQL (JS/TS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v3

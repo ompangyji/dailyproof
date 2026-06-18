@@ -1,0 +1,82 @@
+# 보안 스캐닝(shift-left): 배포 전 CI에서 시크릿·취약점·IaC 오설정을 자동 점검.
+# 처음엔 soft(경보만) — 베이스라인을 잡고 정리한 뒤 hard(fail)로 전환한다.
+#   secret 게이트: gitleaks(히스토리까지) — ISO A.8.24 / ISMS-P 시크릿 관리
+#   vuln/IaC 게이트: trivy(CVE + Helm/Terraform/Dockerfile 오설정) — ISO A.8.8 / CIS
+#   SBOM: 공급망 부품표(CycloneDX) 산출
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 0 * * 1" # 코드 변경 없어도 새로 공개된 CVE를 주기적으로 잡는다
+
+permissions:
+  contents: read
+  security-events: write # SARIF를 GitHub Security 탭에 업로드
+
+jobs:
+  secrets:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # 전체 히스토리까지 시크릿 스캔
+      - uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true # soft: 베이스라인 확인 후 제거(시크릿은 hard로 전환 권장)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 개인 계정 repo는 라이선스 불필요(조직만 GITLEAKS_LICENSE 필요)
+
+  trivy:
+    name: trivy (vuln + IaC + secret)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Trivy scan → SARIF (Security 탭)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: fs
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true # 패치 없는 취약점은 노이즈라 제외(베이스라인 단계)
+          format: sarif
+          output: trivy.sarif
+          exit-code: "0" # soft: 경보만. 정리 후 "1"로 전환
+          skip-dirs: node_modules,.next
+      - name: Upload SARIF
+        if: ${{ !cancelled() }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+      - name: Trivy scan → 표(Actions 로그)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: fs
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "0"
+          skip-dirs: node_modules,.next
+
+  sbom:
+    name: SBOM (CycloneDX)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Generate SBOM
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: fs
+          format: cyclonedx
+          output: sbom.cdx.json
+          scanners: license # 부품표만 — 취약점은 위 trivy 잡에서
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+          retention-days: 30
