@@ -1581,4 +1581,4 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **자료**
 
-- k6 결과 원본은 `docs/performance/results/`(gitignore) — baseline/after 시리즈 txt·json. 표·분석은 `performance/performance.md`.
+- k6 결과 원본을 `docs/performance/results/`에 커밋 — baseline(before)/after 시리즈 txt·json. 표·분석은 `performance/performance.md`.

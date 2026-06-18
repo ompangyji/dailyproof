@@ -11,10 +11,6 @@
 /playwright-report/
 /blob-report/
 /playwright/.cache/
-
-# k6 부하 테스트 원본 결과(큐레이션 수치는 performance.md에) — 커밋 안 함
-/docs/performance/results/
-
 # next.js
 /.next/
 /out/

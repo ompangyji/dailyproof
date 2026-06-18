@@ -1,0 +1,219 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: scripts/load/baseline.js
+        output: -
+
+     scenarios: (100.00%) 2 scenarios, 40 max VUs, 1m12s max duration (incl. graceful stop):
+              * health_live: 20 looping VUs for 20s (exec: healthLive, gracefulStop: 30s)
+              * metrics_read: 20 looping VUs for 20s (exec: metricsRead, startTime: 22s, gracefulStop: 30s)
+
+
+running (0m01.0s), 20/40 VUs, 169 complete and 0 interrupted iterations
+health_live    [   5% ] 20 VUs   01.0s/20s
+metrics_read • [   0% ] waiting  21.0s
+
+running (0m02.0s), 20/40 VUs, 543 complete and 0 interrupted iterations
+health_live    [  10% ] 20 VUs   02.0s/20s
+metrics_read • [   0% ] waiting  20.0s
+
+running (0m03.0s), 20/40 VUs, 756 complete and 0 interrupted iterations
+health_live    [  15% ] 20 VUs   03.0s/20s
+metrics_read • [   0% ] waiting  19.0s
+
+running (0m04.0s), 20/40 VUs, 1097 complete and 0 interrupted iterations
+health_live    [  20% ] 20 VUs   04.0s/20s
+metrics_read • [   0% ] waiting  18.0s
+
+running (0m05.0s), 20/40 VUs, 1335 complete and 0 interrupted iterations
+health_live    [  25% ] 20 VUs   05.0s/20s
+metrics_read • [   0% ] waiting  17.0s
+
+running (0m06.0s), 20/40 VUs, 1489 complete and 0 interrupted iterations
+health_live    [  30% ] 20 VUs   06.0s/20s
+metrics_read • [   0% ] waiting  16.0s
+
+running (0m07.0s), 20/40 VUs, 1928 complete and 0 interrupted iterations
+health_live    [  35% ] 20 VUs   07.0s/20s
+metrics_read • [   0% ] waiting  15.0s
+
+running (0m08.0s), 20/40 VUs, 2167 complete and 0 interrupted iterations
+health_live    [  40% ] 20 VUs   08.0s/20s
+metrics_read • [   0% ] waiting  14.0s
+
+running (0m09.0s), 20/40 VUs, 2554 complete and 0 interrupted iterations
+health_live    [  45% ] 20 VUs   09.0s/20s
+metrics_read • [   0% ] waiting  13.0s
+
+running (0m10.0s), 20/40 VUs, 3008 complete and 0 interrupted iterations
+health_live    [  50% ] 20 VUs   10.0s/20s
+metrics_read • [   0% ] waiting  12.0s
+
+running (0m11.0s), 20/40 VUs, 3175 complete and 0 interrupted iterations
+health_live    [  55% ] 20 VUs   11.0s/20s
+metrics_read • [   0% ] waiting  11.0s
+
+running (0m12.0s), 20/40 VUs, 3456 complete and 0 interrupted iterations
+health_live    [  60% ] 20 VUs   12.0s/20s
+metrics_read • [   0% ] waiting  10.0s
+
+running (0m13.0s), 20/40 VUs, 3767 complete and 0 interrupted iterations
+health_live    [  65% ] 20 VUs   13.0s/20s
+metrics_read • [   0% ] waiting  09.0s
+
+running (0m14.0s), 20/40 VUs, 4267 complete and 0 interrupted iterations
+health_live    [  70% ] 20 VUs   14.0s/20s
+metrics_read • [   0% ] waiting  08.0s
+
+running (0m15.0s), 20/40 VUs, 4489 complete and 0 interrupted iterations
+health_live    [  75% ] 20 VUs   15.0s/20s
+metrics_read • [   0% ] waiting  07.0s
+
+running (0m16.0s), 20/40 VUs, 4636 complete and 0 interrupted iterations
+health_live    [  80% ] 20 VUs   16.0s/20s
+metrics_read • [   0% ] waiting  06.0s
+
+running (0m17.0s), 20/40 VUs, 4907 complete and 0 interrupted iterations
+health_live    [  85% ] 20 VUs   17.0s/20s
+metrics_read • [   0% ] waiting  05.0s
+
+running (0m18.0s), 20/40 VUs, 5342 complete and 0 interrupted iterations
+health_live    [  90% ] 20 VUs   18.0s/20s
+metrics_read • [   0% ] waiting  04.0s
+
+running (0m19.0s), 20/40 VUs, 5561 complete and 0 interrupted iterations
+health_live    [  95% ] 20 VUs   19.0s/20s
+metrics_read • [   0% ] waiting  03.0s
+
+running (0m20.0s), 20/40 VUs, 5901 complete and 0 interrupted iterations
+health_live    [ 100% ] 20 VUs   20.0s/20s
+metrics_read • [   0% ] waiting  02.0s
+
+running (0m21.0s), 00/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs   20s
+metrics_read • [   0% ] waiting  01.0s
+
+running (0m22.0s), 00/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs   20s
+metrics_read • [   0% ] waiting  00.0s
+
+running (0m23.0s), 20/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [   5% ] 20 VUs  01.0s/20s
+
+running (0m24.0s), 20/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  10% ] 20 VUs  02.0s/20s
+
+running (0m25.0s), 20/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  15% ] 20 VUs  03.0s/20s
+
+running (0m26.0s), 20/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  20% ] 20 VUs  04.0s/20s
+
+running (0m27.0s), 20/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  25% ] 20 VUs  05.0s/20s
+
+running (0m28.0s), 20/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  30% ] 20 VUs  06.0s/20s
+
+running (0m29.0s), 20/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  35% ] 20 VUs  07.0s/20s
+
+running (0m30.0s), 20/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  40% ] 20 VUs  08.0s/20s
+
+running (0m31.0s), 20/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  45% ] 20 VUs  09.0s/20s
+
+running (0m32.0s), 20/40 VUs, 5921 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  50% ] 20 VUs  10.0s/20s
+
+running (0m33.0s), 20/40 VUs, 5941 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  55% ] 20 VUs  11.0s/20s
+
+running (0m34.0s), 20/40 VUs, 5941 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  60% ] 20 VUs  12.0s/20s
+
+running (0m35.0s), 20/40 VUs, 5941 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  65% ] 20 VUs  13.0s/20s
+
+running (0m36.0s), 20/40 VUs, 5941 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  70% ] 20 VUs  14.0s/20s
+
+running (0m37.0s), 20/40 VUs, 5941 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  75% ] 20 VUs  15.0s/20s
+
+running (0m38.0s), 20/40 VUs, 5941 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  80% ] 20 VUs  16.0s/20s
+
+running (0m39.0s), 20/40 VUs, 5941 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  85% ] 20 VUs  17.0s/20s
+
+running (0m40.0s), 20/40 VUs, 5941 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  90% ] 20 VUs  18.0s/20s
+
+running (0m41.0s), 20/40 VUs, 5941 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [  95% ] 20 VUs  19.0s/20s
+
+running (0m42.0s), 20/40 VUs, 5941 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read   [ 100% ] 20 VUs  20.0s/20s
+
+running (0m43.0s), 16/40 VUs, 5945 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read ↓ [ 100% ] 20 VUs  20s
+[32m     ✓ health_live 200[0m
+[32m     ✓ health_live status:ok[0m
+[31m     ✗ metrics_read 200
+      ↳  0% — ✓ 0 / ✗ 40[0m
+[31m     ✗ metrics_read has gauge
+      ↳  0% — ✓ 0 / ✗ 40[0m
+
+     checks[2m.........................:[0m [36m99.32%[0m  [36;2m✓ 11842[0m      [36;2m✗ 80[0m  
+     data_received[2m..................:[0m [36m1.6 MB[0m  [36;2m38 kB/s[0m
+     data_sent[2m......................:[0m [36m483 kB[0m  [36;2m11 kB/s[0m
+     http_req_blocked[2m...............:[0m avg=[36m5.43µs[0m   min=[36m851ns[0m  med=[36m3.25µs[0m  max=[36m3.89ms[0m   p(90)=[36m4.67µs[0m   p(95)=[36m5.42µs[0m  
+     http_req_connecting[2m............:[0m avg=[36m998ns[0m    min=[36m0s[0m     med=[36m0s[0m      max=[36m589.08µs[0m p(90)=[36m0s[0m       p(95)=[36m0s[0m      
+     http_req_duration[2m..............:[0m avg=[36m137.31ms[0m min=[36m3.76ms[0m med=[36m39.12ms[0m max=[36m10.53s[0m   p(90)=[36m140.02ms[0m p(95)=[36m295.7ms[0m 
+       { expected_response:true }[2m...:[0m avg=[36m67.54ms[0m  min=[36m3.76ms[0m med=[36m39.03ms[0m max=[36m1.01s[0m    p(90)=[36m124.58ms[0m p(95)=[36m274.45ms[0m
+     [31m✗[0m { scenario:health_live }[2m.....:[0m avg=[36m67.54ms[0m  min=[36m3.76ms[0m med=[36m39.03ms[0m max=[36m1.01s[0m    p(90)=[36m124.58ms[0m p(95)=[36m274.45ms[0m
+     [31m✗[0m { scenario:metrics_read }[2m....:[0m avg=[36m10.46s[0m   min=[36m10.02s[0m med=[36m10.51s[0m  max=[36m10.53s[0m   p(90)=[36m10.53s[0m   p(95)=[36m10.53s[0m  
+     http_req_failed[2m................:[0m [36m0.67%[0m   [36;2m✓ 40[0m         [36;2m✗ 5921[0m
+     [32m✓[0m { scenario:health_live }[2m.....:[0m [36m0.00%[0m   [36;2m✓ 0[0m          [36;2m✗ 5921[0m
+     [31m✗[0m { scenario:metrics_read }[2m....:[0m [36m100.00%[0m [36;2m✓ 40[0m         [36;2m✗ 0[0m   
+     http_req_receiving[2m.............:[0m avg=[36m334.39µs[0m min=[36m12.5µs[0m med=[36m86.35µs[0m max=[36m59.6ms[0m   p(90)=[36m326.02µs[0m p(95)=[36m571.66µs[0m
+     http_req_sending[2m...............:[0m avg=[36m17.08µs[0m  min=[36m2.65µs[0m med=[36m11.82µs[0m max=[36m3.55ms[0m   p(90)=[36m29.75µs[0m  p(95)=[36m32.94µs[0m 
+     http_req_tls_handshaking[2m.......:[0m avg=[36m0s[0m       min=[36m0s[0m     med=[36m0s[0m      max=[36m0s[0m       p(90)=[36m0s[0m       p(95)=[36m0s[0m      
+     http_req_waiting[2m...............:[0m avg=[36m136.96ms[0m min=[36m3.57ms[0m med=[36m38.94ms[0m max=[36m10.53s[0m   p(90)=[36m139.35ms[0m p(95)=[36m295.46ms[0m
+     http_reqs[2m......................:[0m [36m5961[0m    [36;2m138.439534/s[0m
+     iteration_duration[2m.............:[0m avg=[36m137.44ms[0m min=[36m3.89ms[0m med=[36m39.24ms[0m max=[36m10.53s[0m   p(90)=[36m140.13ms[0m p(95)=[36m295.9ms[0m 
+     iterations[2m.....................:[0m [36m5961[0m    [36;2m138.439534/s[0m
+     vus[2m............................:[0m [36m16[0m      [36;2mmin=0[0m        [36;2mmax=20[0m
+     vus_max[2m........................:[0m [36m40[0m      [36;2mmin=40[0m       [36;2mmax=40[0m
+running (0m43.1s), 00/40 VUs, 5961 complete and 0 interrupted iterations
+health_live  ✓ [ 100% ] 20 VUs  20s
+metrics_read ✓ [ 100% ] 20 VUs  20s
