@@ -102,5 +102,6 @@
 - [x] `retrospective/async-pipeline.md` — 비동기 파이프라인 회고(유령 job·잘린 키·지연 폭발·trace_id null)
 - [x] `retrospective/notion-sync.md` — Notion sync 회고(거대 문서 타임아웃·병렬 삭제·재시도)
 - [x] `retrospective/test-layers.md` — 테스트 계층 회고(유닛·health·smoke·E2E가 각각 보는 것, E2E를 왜·어디에)
+- [x] `retrospective/metrics-load.md` — /metrics 부하 ~10초 행 회고(3-way 진단: 쿼리·REST·pod 경로 격리, 캐시·fail-fast·stale, 환경성 결론)
 - [ ] `incidents/incident-log.md` — 장애 재현 기록
 - [x] `performance/performance.md` — 성능 베이스라인(k6, 조회+DB vs 순수앱 대비·threshold·병목 가설)

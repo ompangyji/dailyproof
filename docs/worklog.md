@@ -1552,3 +1552,33 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **자료**
 - `120-test-ci-e2e-pass-20260618.png` — CI 워크플로 run 성공: `e2e (playwright)` 등 4개 잡 green + playwright-report 아티팩트.
+
+### 3. 성능 베이스라인(k6) + `/metrics` 병목 진단·개선
+
+**이전 상태 / 문제**
+
+- 성능 근거가 없었다(부하 스크립트·baseline 부재). 계획서 "성능 테스트"는 Lighthouse가 아니라 **실제 API 부하(p50/p95/RPS/실패율)** 를 요구.
+
+**목적**
+
+- k6로 부하 시나리오 2개 이상을 만들어 baseline을 남기고, 드러나는 병목을 가설·개선·재측정으로 검증한다.
+
+**한 일**
+
+- `scripts/load/baseline.js`(k6): 두 시나리오 순차 실행 — `health_live`(`/health/live`, DB 없음 기준선) vs `metrics_read`(`/metrics`, `metrics_snapshot` RPC, DB 왕복). threshold(p95·실패율)로 성능 기준을 run 합/불로 강제.
+- `/metrics` 개선(`src/app/metrics/route.ts`): ① TTL 캐시+single-flight, ② fail-fast 타임아웃(AbortController 2s), ③ serve-stale.
+- 도구 선택 근거(autocannon→k6 전환)·실행/배포 명령은 `performance/performance.md`. 진단 과정은 회고 `retrospective/metrics-load.md`.
+
+**핵심 설계 / 진단**
+
+- baseline에서 `metrics_read`가 부하 시 ~10.5초·100% 실패. "DB 탓"으로 단정하지 않고 **3-way로 격리**: 쿼리 직접 3.6ms / REST API(개발자 머신) ~130ms / **앱 pod 경유 ~10s**. → 느린 건 **pod ↔ Supabase 네트워크 경로**뿐.
+- 부하 무관하게 좋은/나쁜 구간이 분 단위로 출렁(VUS=20 반복: 통과↔70%↔100% 실패) → **로컬 WSL2/k3s 환경성 네트워크**로 결론. 앱 코드는 fail-fast+stale로 **가릴 수**(10초→2초, 부분 생존) 있어도 **없애진** 못함.
+
+**검증**
+
+- before: `metrics_read` 40건·p95 10.5s·실패율 100%. after(좋은 구간): **8,423건·p95 112ms·실패율 0%**(threshold 통과). 나쁜 구간도 10초→**2초 fail-fast**, stale로 일부 생존.
+- `health_live`는 줄곧 0% 실패(개선 후 p95 ~98ms).
+
+**자료**
+
+- k6 결과 원본은 `docs/performance/results/`(gitignore) — baseline/after 시리즈 txt·json. 표·분석은 `performance/performance.md`.
