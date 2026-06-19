@@ -1676,10 +1676,13 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `security.yml`: gitleaks `continue-on-error` 제거(시크릿 발견 시 job 실패), trivy 게이트 표 스텝 `exit-code "0" → "1"`(HIGH/CRITICAL 발견 시 job 실패). SARIF 업로드 스텝은 `exit-code "0"` 유지(Security 탭 보고는 항상).
 - 이로써 보안 스캐닝이 **soft 보고 → hard merge 게이트**가 됨. (배포 후 PostSync smoke 게이트와 같은 결의 "비정상 차단" — 이번엔 merge 전 단계)
 
-**검증**
+**검증 (정상 / 비정상 대비 시연)**
 
-- 현재 HIGH/CRITICAL 0·시크릿 0이라 hard로 올려도 **통과**(CI green). 향후 HIGH/CRITICAL이 들어오면 그 PR이 자동 차단된다.
+- **정상**: hard gate 적용 후 현재 코드는 HIGH/CRITICAL 0·시크릿 0이라 `security` 잡 **green**(게이트 켜졌는데 통과).
+- **비정상**: throwaway 브랜치에서 web의 `readOnlyRootFilesystem`를 일부러 제거(KSV-0014 HIGH 재발) → PR 열자 trivy 게이트가 탐지 → `security` 잡 **RED → merge 차단**. 시연 후 브랜치는 merge 없이 폐기.
+- → "보안 미달이면 merge 전에 막는다"가 실제로 작동함을 정상↔비정상으로 입증. (배포 후 PostSync smoke 게이트의 merge 전 버전)
 
 **자료**
 
-- `128-sec-hardgate-pass-green-20260619.png` — hard gate 적용 후 `security` 잡 green(게이트 켜졌는데 현 코드는 통과 = **정상** 증거). 비정상(red 차단) 데모는 후속.
+- `128-sec-hardgate-pass-green-20260619.png` — (정상) hard gate 적용 후 `security` 잡 green.
+- `133-sec-hardgate-block-red-20260619.png` — (비정상) 일부러 위반(web readOnly 제거) 시 trivy 게이트가 잡아 `security` 잡 RED → merge 차단.
