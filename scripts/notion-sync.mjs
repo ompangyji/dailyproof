@@ -217,7 +217,7 @@ async function mapPool(items, limit, fn) {
   const worker = async () => {
     while (next < items.length) {
       const i = next++;
-      out[i] = await fn(items[i], i);
+      out[i] = await fn(items[i]); // fn은 항목만 받는다 — 안 쓰는 인덱스 인자 제거(CodeQL: superfluous trailing arg)
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
