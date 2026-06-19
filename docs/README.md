@@ -56,6 +56,7 @@
 | `incident-` | 장애 재현·탐지 화면 |
 | `perf-` | k6/autocannon 성능 결과 |
 | `admin-` | admin ops 페이지 |
+| `backup-` | 백업·복구 드릴(pg_dump·복원·행수 검증) |
 
 예시 (정렬 = 작업한 순서):
 
@@ -99,6 +100,7 @@
 - [x] `runbooks/argocd.md` — ArgoCD GitOps(pull) 설치·repo 크리덴셜·Application 동기화·UI
 - [x] `runbooks/jenkins.md` — self-hosted Jenkins 파이프라인(Jenkinsfile, GitHub Actions와 동일 검사)
 - [x] `runbooks/rollback.md` — 롤백(ArgoCD/helm/이미지태그) + 배포 후 smoke 검증·체크리스트
+- [x] `runbooks/backup-recovery.md` — 백업·복구(상태 구분·DB/스토리지 전략·RPO/RTO·복구 시나리오 + pg_dump→복원→행수 일치 드릴 실측)
 - [x] `retrospective/cicd-gitops.md` — CI/CD·GitOps 트러블슈팅 회고(증상·원인·해결·교훈)
 - [x] `retrospective/wsl-drvfs.md` — WSL/drvfs 환경 제약 회고(chmod·CRLF·EPERM 빌드·pathspec)
 - [x] `retrospective/async-pipeline.md` — 비동기 파이프라인 회고(유령 job·잘린 키·지연 폭발·trace_id null)
