@@ -66,6 +66,7 @@ CI(GitHub Actions·Jenkins)와 배포(Terraform·ArgoCD)를 붙이며 막혔던 
 - **원인**: `argocd app rollback`은 **과거 git revision의 매니페스트**를 재적용한다. 그런데 replicas=2는 git이 아니라 **Application에 박힌 파라미터**라, 과거 revision을 적용해도 그 파라미터가 **그대로 살아남아** 다시 2로 렌더됐다. (롤백은 git 기준 되돌리기, param은 그 바깥.) 게다가 param만 바꾼 sync는 git commit이 같아 **새 history revision이 안 생기기도** 했다.
 - **해결**: 파라미터로 준 변경은 **`argocd app unset -p web.replicas`** 로 제거해야 진짜 되돌려진다(→ web 1 복귀). 끝나면 `--sync-policy automated --self-heal --auto-prune`로 auto-sync 원복.
 - **교훈**: GitOps의 "진짜 롤백" = **git을 되돌리는 것**(source of truth). `git revert` 하면 auto-sync가 알아서 이전 상태로 맞춘다(끌 필요도 없음). **`app set -p`(out-of-band 파라미터)** 는 git 밖에 살아 rollback으로 안 사라진다 — 편하지만 롤백·재현성과 어긋날 수 있다(정석은 git/secret store). **변경을 "어디에" 했느냐(git이냐 param이냐)** 에 따라 되돌리는 방법이 다르다.
+- **교훈(상태로 판단)**: 선언형(declarative) 시스템에선 **"됐다"를 명령의 성공 여부가 아니라 관찰된 상태로 판단**한다. 예: `argocd app set --revision main` 후 `argocd app sync`가 `another operation in progress`로 **실패해도**, auto-sync가 이미 desired(main)로 **수렴**시켜 결과는 맞다. 즉 `sync` 명령은 "지금 맞춰라"는 **재촉(nudge)** 일 뿐이고, source of truth는 **`argocd app get`의 `Synced`(원하는 revision) + `Healthy`** 상태다. (k8s 전반에 통하는 사고: 명령 exit code가 아니라 **desired == observed** 로 본다.)
 
 **사용한 명령어 (무엇을 / 왜)** — 이 실습에서 친 순서대로
 
