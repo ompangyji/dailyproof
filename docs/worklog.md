@@ -1552,7 +1552,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **비고**
 
-- 이 무렵 CI에 **일시적 플레이크**가 있었다: `docker build`의 `npm ci`가 `ECONNRESET`(네트워크 일시 끊김)으로 실패. 코드 변경 없이 **재실행으로 통과**(transient 확정). 상세·재실행 기준은 회고 `retrospective/cicd-gitops.md` §10.
+- 이 무렵 CI에 **일시적 플레이크**가 있었다: `docker build`의 `npm ci`가 `ECONNRESET`(네트워크 일시 끊김)으로 실패. 코드 변경 없이 **재실행으로 통과**(transient 확정). 상세·재실행 기준은 회고 `retrospective/cicd-gitops.md` §10. 자료: `131-deploy-ci-flake-econnreset-20260618.png`.
 
 **자료**
 - `120-test-ci-e2e-pass-20260618.png` — CI 워크플로 run 성공: `e2e (playwright)` 등 4개 잡 green + playwright-report 아티팩트.
@@ -1586,6 +1586,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - k6 결과 원본을 `docs/performance/results/`에 커밋 — baseline(before)/after 시리즈 txt·json. 표·분석은 `performance/performance.md`.
+- `129-perf-k6-baseline-run-20260618.png`(k6 첫 실행 화면, 2 시나리오 순차) · `130-perf-k6-baseline-result-20260618.png`(첫 baseline 결과).
 
 ## 2026-06-19
 
@@ -1621,12 +1622,14 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - `docs/security/scans/`: `trivy-fs-first`(before, KSV-0014 ×3)·`trivy-after-harden`(0)·`trivy-misconfig-all`(LOW/MED 목록)·`trivy-after-suppress`(0).
-- Security 탭 Code scanning findings 스샷(trivy+CodeQL, "All tools working").
+- `121-sec-codescan-private-disabled-20260618.png`(private라 Code scanning 불가→public 전환 근거) · `122-sec-dependabot-prs-20260618.png`(Dependabot 작동).
+- `123-sec-codescan-findings-28-20260619.png`(탐지 28건, "All tools working") · `124-sec-codescan-ksv0014-detail-20260619.png`(KSV-0014 상세).
+- `125-sec-harden-runtime-healthy-20260619.png`(하드닝 런타임: web·worker Healthy·smoke OK·EROFS 없음).
 - 회고 `retrospective/security-scanning.md`, triage `docs/security/findings-triage.md`.
 
 **비고 / 후속**
 
-- 막힌 지점: ① private라 Code scanning 불가(→public) ② trivy-action 태그가 `v` 접두사(`v0.36.0`)라 `0.29.0`/`0.28.0`은 미존재(→`git ls-remote`로 확인 후 정정) ③ `.trivyignore` ID는 틀리면 조용히 무효 → 재스캔으로 검증.
+- 막힌 지점: ① private라 Code scanning 불가(→public) ② trivy-action 태그가 `v` 접두사(`v0.36.0`)라 `0.29.0`/`0.28.0`은 미존재(→`git ls-remote`로 확인 후 정정, 에러 화면 `132-sec-trivy-action-version-error-20260619.png`) ③ `.trivyignore` ID는 틀리면 조용히 무효 → 재스캔으로 검증.
 - 후속: soft → **hard gate** 전환(misconfig 0이라 통과 예상).
 
 ### 2. GitOps 완료 판단은 명령 exit가 아니라 상태(Synced+Healthy)
@@ -1658,6 +1661,10 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - **교훈(스캔 범위)**: 로컬 검증과 CI 스캔의 **범위가 다르면 사각지대가 생긴다**(로컬 차트만 vs CI repo 전체) → 로컬도 repo 루트(`trivy fs .`)로 스캔.
 - 막힌 지점: `harden/xss-and-ignore` merge 후 로컬 pull 누락으로 stale main 위에서 작업 → `git fetch` + rebase로 정렬(앞으로 merge 직후 pull 챙김).
 
+**자료**
+
+- `126-sec-codescan-4-open-20260619.png`(정리 전 4 Open) · `127-sec-codescan-0-open-resolved-20260619.png`(정리 후 **0 Open·45 Closed**, "All alerts resolved").
+
 ### 4. 보안 게이트 soft → hard 전환
 
 **이전 상태 / 목적**
@@ -1672,3 +1679,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **검증**
 
 - 현재 HIGH/CRITICAL 0·시크릿 0이라 hard로 올려도 **통과**(CI green). 향후 HIGH/CRITICAL이 들어오면 그 PR이 자동 차단된다.
+
+**자료**
+
+- `128-sec-hardgate-pass-green-20260619.png` — hard gate 적용 후 `security` 잡 green(게이트 켜졌는데 현 코드는 통과 = **정상** 증거). 비정상(red 차단) 데모는 후속.
