@@ -1624,3 +1624,13 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - 막힌 지점: ① private라 Code scanning 불가(→public) ② trivy-action 태그가 `v` 접두사(`v0.36.0`)라 `0.29.0`/`0.28.0`은 미존재(→`git ls-remote`로 확인 후 정정) ③ `.trivyignore` ID는 틀리면 조용히 무효 → 재스캔으로 검증.
 - 후속: soft → **hard gate** 전환(misconfig 0이라 통과 예상).
+
+### 2. GitOps 완료 판단은 명령 exit가 아니라 상태(Synced+Healthy)
+
+**이전 상태 / 문제**
+
+- 하드닝 배포를 ArgoCD로 검증하다 `argocd app sync`가 `another operation in progress`로 **실패**했는데 결과는 멀쩡했다. "그럼 됐다는 거야 만 거야?"가 헷갈렸다.
+
+**한 일 / 교훈**
+
+- 원리를 문서화(`retrospective/cicd-gitops.md` §6 교훈 + `runbooks/argocd.md`): 선언형(declarative) 시스템에선 **"됐다"를 명령 성공 여부가 아니라 관찰된 상태로 판단**한다. `sync` 명령이 실패해도 **auto-sync가 desired로 수렴**시켜 결과는 맞을 수 있다 → source of truth는 `argocd app get`의 **`Synced`(원하는 revision) + `Healthy`**. (k8s 전반: 명령 exit가 아니라 desired == observed)
