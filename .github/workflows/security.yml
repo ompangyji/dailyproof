@@ -26,7 +26,7 @@ jobs:
         with:
           fetch-depth: 0 # 전체 히스토리까지 시크릿 스캔
       - uses: gitleaks/gitleaks-action@v2
-        continue-on-error: true # soft: 베이스라인 확인 후 제거(시크릿은 hard로 전환 권장)
+        # hard gate: 시크릿 발견 시 job 실패 → merge 차단 (continue-on-error 제거)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # 개인 계정 repo는 라이선스 불필요(조직만 GITLEAKS_LICENSE 필요)
@@ -45,7 +45,7 @@ jobs:
           ignore-unfixed: true # 패치 없는 취약점은 노이즈라 제외(베이스라인 단계)
           format: sarif
           output: trivy.sarif
-          exit-code: "0" # soft: 경보만. 정리 후 "1"로 전환
+          exit-code: "0" # SARIF는 항상 업로드(게이트는 아래 표 스텝이 담당)
           skip-dirs: node_modules,.next
       - name: Upload SARIF
         if: ${{ !cancelled() }}
@@ -60,7 +60,7 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           format: table
-          exit-code: "0"
+          exit-code: "1" # hard gate: HIGH/CRITICAL 발견 시 job 실패 → merge 차단
           skip-dirs: node_modules,.next
 
   sbom:
