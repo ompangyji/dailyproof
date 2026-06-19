@@ -1750,9 +1750,9 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **한 일**
 
-- `/admin/ops` 페이지(server component) + `requeueJobAction` server action.
-- 기능 4가지: **실패 job 조회**(error_code·attempts·last_error) / **stuck job 조회**(5분+ `processing`) / **재처리(requeue)** / **orphan object 조회**(media 버킷 ⨯ `proof_assets` 미참조).
-- DB(`supabase/schema.sql`)에 권한 모델 추가: `user_roles`+`is_admin()`, 감사 테이블 `admin_audit`, 관리 RPC `admin_failed_jobs`/`admin_stuck_jobs`/`admin_requeue_job`/`admin_orphans`.
+- `/admin/ops` 페이지(server component) + `requeueJobAction`·`deadLetterJobAction` server action.
+- 기능: **실패 job 조회**(error_code·attempts·last_error) / **stuck job 조회**(5분+ `processing`) / **재처리(requeue)** / 영구실패 **포기(dead-letter, 사유 입력)** + **dead 목록 조회·되살리기** / **orphan object 조회**(media 버킷 ⨯ `proof_assets` 미참조).
+- DB(`supabase/schema.sql`)에 권한 모델 추가: `user_roles`+`is_admin()`, 감사 테이블 `admin_audit`, 관리 RPC `admin_failed_jobs`/`admin_stuck_jobs`/`admin_requeue_job`/`admin_orphans`/`admin_dead_letter_job`/`admin_dead_jobs`.
 
 **핵심 설계 (현업 스펙 = 최소권한 + defense in depth + 감사)**
 
@@ -1760,16 +1760,21 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - **다층 인가**: ① 페이지 진입 시 `is_admin()` 게이트(비-admin엔 404로 존재 자체를 숨김) ② RPC 내부에서 다시 `is_admin()` 재검증(앱 레이어만 믿지 않음). 한 층 우회해도 DB에서 막힘.
 - **감사**: 재처리 같은 권한 작업은 `admin_audit`에 actor·action·target·시각 기록. 역할 부여는 SQL로만(앱에서 불가, 의도적).
 - **재처리 의미**: job을 `pending`+attempts 리셋+잠금 해제, asset을 `uploaded`로 복귀. enqueue 트리거는 insert에만 반응하므로 중복 job이 생기지 않음. stuck 판정은 `locked_at` 경과로 한다.
+- **transient vs permanent (dead-letter)**: 재처리는 *일시적* 실패용. 원본 파일 없음·손상 같은 *영구* 실패(poison message)는 재처리해도 같은 실패가 무한 반복되므로 `dead` 상태로 종결한다(`claim_job`은 `pending`만 집어 자동으로 루프에서 빠지고, 실패 목록에서도 제거됨). 사유는 필수이며 `admin_audit`에 `dead_letter`로 남긴다. 근본 원인이 해소되면 재처리로 되살린다(`max_attempts=3` 자동 한도 + 수동 dead-letter의 2단 방어).
 - `is_admin()`을 `SECURITY DEFINER`로 둬 `user_roles` RLS 재귀를 피함(`auth.uid()`는 호출자 기준 유지).
 
 **검증**
 
 - 코드: tsc 에러 0, `next build` 번들 컴파일 성공(타입체크 단계의 playwright 오류는 로컬 devDependency 미설치 환경 한계로 무관).
 - 동작(브라우저+SQL editor): ① 실패 job 조회(`download_failed`) → ② **재처리** 클릭 후 실패 목록 0으로 비워짐 → ③ `admin_audit`에 `requeue_job` 행 적재 → ④ admin 권한 제거 후 `/admin/ops` 접속 시 **404**(권한 차단). 정상·비정상 모두 확인.
+- dead-letter: 재처리해도 반복되는 영구 실패 job(원본 파일 없음)을 **사유와 함께 포기** → dead 섹션으로 이동·실패 목록에서 제거 → `admin_audit`에 `dead_letter`+사유 적재 확인.
 
 **자료**
 
-- `135-admin-ops-failed-list-20260619.png` — 실패 job 조회(재처리 전, error_code·재처리 버튼).
+- `135-admin-ops-failed-list-20260619.png` — 실패 job 조회(재처리 전, error_code·재처리/포기 버튼).
 - `136-admin-ops-requeued-20260619.png` — 재처리 후 실패 작업 0.
 - `137-admin-audit-requeue-log-20260619.png` — `admin_audit`에 `requeue_job` 감사 기록.
 - `138-admin-ops-forbidden-404-20260619.png` — 비-admin 접근 시 404(서버 권한 강제).
+- `139-admin-ops-deadletter-before-20260620.png` — 실패 job 행의 재처리/포기(사유 입력) 버튼.
+- `140-admin-ops-deadletter-after-20260620.png` — 사유와 함께 포기 → dead 섹션으로 이동, 실패 목록 0.
+- `141-admin-audit-dead-letter-20260620.png` — `admin_audit`에 `dead_letter`+사유 감사 기록.
