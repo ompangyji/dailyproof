@@ -77,6 +77,8 @@ kubectl get pods -n dailyproof-staging                   # web·worker Running
 ```
 또는 ArgoCD UI에서 `dailyproof-staging` 앱의 리소스 트리(Deployment→ReplicaSet→Pod)와 Synced/Healthy 상태를 본다.
 
+> **완료/원복 판단은 명령 exit가 아니라 상태로.** `argocd app sync`가 실패해도(`another operation in progress` 등) auto-sync가 desired로 수렴시키니, "됐다"는 `argocd app get`의 **`Synced`(원하는 revision) + `Healthy`** 로 본다. 선언형의 source of truth는 명령이 아니라 **관찰된 상태**다.
+
 **배포 후 검증**: sync 후 `SMOKE_BASE_URL=<앱 주소> npm run smoke`로 게이트. 실패 시 `runbooks/rollback.md`로 롤백.
 
 ---
