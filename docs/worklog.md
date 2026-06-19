@@ -1550,6 +1550,10 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - PR에서 CI 워크플로 run 성공(Status Success, 2m 38s). 잡 4개 전부 green — `e2e (playwright)` 2m 22s 포함. Playwright 2개 테스트 통과, `playwright-report` 아티팩트 생성.
 
+**비고**
+
+- 이 무렵 CI에 **일시적 플레이크**가 있었다: `docker build`의 `npm ci`가 `ECONNRESET`(네트워크 일시 끊김)으로 실패. 코드 변경 없이 **재실행으로 통과**(transient 확정). 상세·재실행 기준은 회고 `retrospective/cicd-gitops.md` §10.
+
 **자료**
 - `120-test-ci-e2e-pass-20260618.png` — CI 워크플로 run 성공: `e2e (playwright)` 등 4개 잡 green + playwright-report 아티팩트.
 
