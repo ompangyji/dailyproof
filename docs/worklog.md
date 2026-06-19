@@ -1701,3 +1701,23 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **검증**
 
 - 3+ 장애 ✓, 탐지/원인/조치/재발방지 ✓, 신호(로그·메트릭·이벤트) 2종+ ✓, runbook 연결 ✓. (trace는 직접 추적엔 미사용 — `async-pipeline` 회고로 안내)
+
+### 6. 확장성 문서(scaling.md)
+
+**이전 상태 / 문제**
+
+- 부하 측정(k6·`/metrics` 병목)은 했지만, "사용자 증가 시 어디가 먼저 막히고 무엇부터 확장하나"를 정리한 문서가 없었다(계획서 4.13).
+
+**한 일**
+
+- `docs/architecture/scaling.md` — 현재 구조(web stateless·worker 폴링·jobs 테이블 큐·Supabase) 기준으로 병목 컴포넌트 식별과 확장 순서 정리.
+- 확장 순서: ① web 수평확장+HPA(CPU) → ② worker 수평확장+**큐 깊이(pending) 기반 HPA** → ③ DB 완화(캐시·풀러·읽기복제) → ④ 큐 분리(전용 큐)·storage CDN.
+
+**핵심 설계 (실측 연결)**
+
+- **DB가 진짜 천장**: `/metrics` 부하 행이 DB-측 경로 한계의 직접 증거(metrics-load·performance 링크).
+- **worker scale-out 비용 낮음**: `claim_job`이 이미 `FOR UPDATE SKIP LOCKED`라 다중 worker 정합성 보장됨 → replicas + 큐깊이 HPA만으로 확장. 큐 깊이 메트릭은 이미 `/metrics`에 노출.
+
+**검증**
+
+- 계획서 4.13 완료기준(병목 식별·분리 순서·web/worker/storage/queue 어디 먼저) 충족. 회고와 중복 없는 net-new 종합.
