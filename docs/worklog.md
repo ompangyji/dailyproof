@@ -1686,3 +1686,18 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `128-sec-hardgate-pass-green-20260619.png` — (정상) hard gate 적용 후 `security` 잡 green.
 - `133-sec-hardgate-block-red-20260619.png` — (비정상) 일부러 위반(web readOnly 제거) 시 trivy 게이트가 잡아 `security` 잡 RED → merge 차단.
+
+### 5. incident-log(장애 등록부) 작성
+
+**이전 상태 / 문제**
+
+- 트러블슈팅이 회고(`retrospective/...`)에 주제별로 흩어져 있었고, 운영 관점의 **통일된 장애 등록부**(탐지/원인/조치/재발방지)가 없었다(계획서 4.17 미충족).
+
+**한 일**
+
+- `docs/incidents/incident-log.md` — 실제 겪은 장애 **5건**을 **얇은 register**로 색인(빈 build-arg→readiness 503·broken image→ImagePullBackOff·`/metrics` 부하 행·CI 플레이크 ECONNRESET·PostSync hook이 Ingress에 막힘). 통일 포맷(증상/탐지→원인→조치→재발방지→사용한 신호→연결→자료), 상세 분석은 **회고·runbook으로 링크아웃**(중복 회피).
+- 범위가 명확한 정리 작업이라 **teammate에 위임** 후 검토·보정(게이트 차단 자료 `133` 보정)하고 커밋.
+
+**검증**
+
+- 3+ 장애 ✓, 탐지/원인/조치/재발방지 ✓, 신호(로그·메트릭·이벤트) 2종+ ✓, runbook 연결 ✓. (trace는 직접 추적엔 미사용 — `async-pipeline` 회고로 안내)
