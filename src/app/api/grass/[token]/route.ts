@@ -49,6 +49,12 @@ function parseHex(h: string | null): RGB | null {
   if (!/^[0-9a-f]{6}$/.test(v)) return null;
   return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
 }
+
+// 검증된 RGB(0~255 정수)로부터 #rrggbb 를 '재구성'한다. 원시 입력 문자열을 SVG에 그대로 흘리지 않음
+// (raw query param을 재사용하면 정적 분석이 sanitize를 증명 못 해 XSS로 오인 → 파싱된 정수에서 다시 만든다).
+function rgbToHex([r, g, b]: RGB): string {
+  return "#" + [r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("");
+}
 function toHex(rgb: RGB): string {
   return (
     "#" +
@@ -225,9 +231,10 @@ export async function GET(
   }
 
   const radiusRaw = parseInt(searchParams.get("radius") ?? "", 10);
+  const bgRgb = parseHex(searchParams.get("bg"));
   const opts: Options = {
     theme: searchParams.get("theme") === "dark" ? "dark" : "light",
-    bg: parseHex(searchParams.get("bg")) ? `#${searchParams.get("bg")!.replace(/^#/, "")}` : undefined,
+    bg: bgRgb ? rgbToHex(bgRgb) : undefined, // 검증된 정수에서 재구성(raw 입력 미반영)
     color: parseHex(searchParams.get("color")) ?? undefined,
     radius: Number.isFinite(radiusRaw) ? Math.max(0, Math.min(6, radiusRaw)) : 2,
     hideTitle: truthy(searchParams.get("hideTitle")),

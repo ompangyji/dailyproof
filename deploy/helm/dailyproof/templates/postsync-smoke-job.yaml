@@ -35,6 +35,9 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          resources: # curl 한 번 도는 짧은 Job이라 작게 — 폭주 방지용 상·하한
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
           volumeMounts:
             - name: tmp
               mountPath: /tmp

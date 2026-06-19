@@ -1,0 +1,19 @@
+# trivy 억제 목록 — accepted findings. 상세 사유는 docs/security/findings-triage.md.
+# 모두 LOW/MEDIUM (HIGH/CRITICAL은 securityContext 하드닝으로 0). 우리 환경에선 의도적이거나 무관한 것만 억제한다.
+
+# ConfigMap 'sensitive content': NEXT_PUBLIC_*(anon 키)는 설계상 공개값, WORKER_*는 타임아웃 설정(비밀 아님).
+# 진짜 시크릿(service_role)은 Secret으로 분리돼 있음.
+KSV-01010
+
+# 이미지 태그 'latest': default values만 latest고 staging/prod는 실태그로 override. 로컬 k3s는 IfNotPresent(레지스트리 pull 안 함).
+KSV-0013
+
+# runAsUser/runAsGroup > 10000: 1001은 이미지의 표준 non-root 유저와 일치. "root로 안 돈다"는 목적은 충족.
+KSV-0020
+KSV-0021
+
+# default namespace: 차트 템플릿엔 namespace를 박지 않음 → 배포 시 Helm release namespace(dailyproof-staging)로 들어감. 실제론 default 아님.
+KSV-0110
+
+# untrusted registry: 핀된 공개 이미지(curlimages/curl:<digest>), 사설 레지스트리 자체가 없음.
+KSV-0125

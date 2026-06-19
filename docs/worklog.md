@@ -1550,6 +1550,10 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - PR에서 CI 워크플로 run 성공(Status Success, 2m 38s). 잡 4개 전부 green — `e2e (playwright)` 2m 22s 포함. Playwright 2개 테스트 통과, `playwright-report` 아티팩트 생성.
 
+**비고**
+
+- 이 무렵 CI에 **일시적 플레이크**가 있었다: `docker build`의 `npm ci`가 `ECONNRESET`(네트워크 일시 끊김)으로 실패. 코드 변경 없이 **재실행으로 통과**(transient 확정). 상세·재실행 기준은 회고 `retrospective/cicd-gitops.md` §10.
+
 **자료**
 - `120-test-ci-e2e-pass-20260618.png` — CI 워크플로 run 성공: `e2e (playwright)` 등 4개 잡 green + playwright-report 아티팩트.
 
@@ -1582,3 +1586,55 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - k6 결과 원본을 `docs/performance/results/`에 커밋 — baseline(before)/after 시리즈 txt·json. 표·분석은 `performance/performance.md`.
+
+## 2026-06-19
+
+### 1. CI 보안 스캐닝 도입 + findings 정리(triage·하드닝)
+
+**이전 상태 / 문제**
+
+- CI에 보안 스캔이 전무했다 — 취약점(CVE)·시크릿·IaC 오설정·소스(SAST) 검증이 하나도 없었다.
+- 보안 인증(ISO 27001/ISMS-P 등)이 요구하는 "기술 통제"를 파이프라인으로 자동 검증·증명할 필요. ("인증 취득"이 아니라 통제를 코드로 강제·검증한 경험)
+
+**목적**
+
+- shift-left 보안 스캐닝을 CI에 붙여 배포 전 자동 검증. 도구가 올린 findings를 triage(선별)→수정/억제로 닫고, 최종적으로 merge gate화.
+
+**한 일**
+
+- 보안 스캐닝 CI(`security.yml`·`codeql.yml`·`dependabot.yml`): gitleaks(시크릿 히스토리)·trivy(CVE+IaC 오설정+시크릿)·CodeQL(SAST)·Dependabot(의존성)·SBOM(CycloneDX). 결과는 SARIF로 GitHub Security 탭. 처음엔 soft(경보).
+- repo를 **public 전환** — Code scanning·CodeQL은 private 개인 repo에선 유료(GitHub Code Security)라 무료로 쓰려면 public. 전환 전 gitleaks로 **히스토리 시크릿 0** 확인.
+- **findings triage**: 스캐너 28건을 FIX/CodeQL/SUPPRESS로 분류·판정(`docs/security/findings-triage.md`).
+- **하드닝**: web·worker·smoke에 `readOnlyRootFilesystem`+쓰기용 emptyDir, `seccompProfile: RuntimeDefault`, smoke 최소권한·resources. grass SVG의 bg를 검증된 정수에서 재구성(CodeQL reflected XSS FP 정리). accepted findings는 `.trivyignore`로 사유와 함께 억제.
+
+**핵심 설계**
+
+- shift-left: "배포 전(CI)에 잡는다". 도구가 규칙을 아는 출처는 셋 — CVE 공개DB(MITRE→NVD→GHSA) / 정책 코드룰(CIS를 코드화) / SAST 패턴(CWE). 상세는 회고 `security-scanning.md`.
+- **triage는 도구가 아니라 사람의 판단**(real/FP, fix/accept). 안 고칠 건 **사유를 남겨 accepted risk로** 기록(`findings-triage.md`).
+
+**검증**
+
+- trivy: before KSV-0014(readOnlyRootFilesystem) HIGH ×3 → 하드닝 후 0. 억제까지 한 뒤 **전 템플릿 misconfig 0**(HIGH/CRITICAL 0).
+- 하드닝 런타임(ArgoCD로 브랜치 sync): web·worker `Healthy`, PostSync smoke `OK`, web 로그 **EROFS 없음**(readOnly가 앱 안 깨뜨림).
+- gitleaks: **No leaks detected**(히스토리 전체).
+
+**자료**
+
+- `docs/security/scans/`: `trivy-fs-first`(before, KSV-0014 ×3)·`trivy-after-harden`(0)·`trivy-misconfig-all`(LOW/MED 목록)·`trivy-after-suppress`(0).
+- Security 탭 Code scanning findings 스샷(trivy+CodeQL, "All tools working").
+- 회고 `retrospective/security-scanning.md`, triage `docs/security/findings-triage.md`.
+
+**비고 / 후속**
+
+- 막힌 지점: ① private라 Code scanning 불가(→public) ② trivy-action 태그가 `v` 접두사(`v0.36.0`)라 `0.29.0`/`0.28.0`은 미존재(→`git ls-remote`로 확인 후 정정) ③ `.trivyignore` ID는 틀리면 조용히 무효 → 재스캔으로 검증.
+- 후속: soft → **hard gate** 전환(misconfig 0이라 통과 예상).
+
+### 2. GitOps 완료 판단은 명령 exit가 아니라 상태(Synced+Healthy)
+
+**이전 상태 / 문제**
+
+- 하드닝 배포를 ArgoCD로 검증하다 `argocd app sync`가 `another operation in progress`로 **실패**했는데 결과는 멀쩡했다. "그럼 됐다는 거야 만 거야?"가 헷갈렸다.
+
+**한 일 / 교훈**
+
+- 원리를 문서화(`retrospective/cicd-gitops.md` §6 교훈 + `runbooks/argocd.md`): 선언형(declarative) 시스템에선 **"됐다"를 명령 성공 여부가 아니라 관찰된 상태로 판단**한다. `sync` 명령이 실패해도 **auto-sync가 desired로 수렴**시켜 결과는 맞을 수 있다 → source of truth는 `argocd app get`의 **`Synced`(원하는 revision) + `Healthy`**. (k8s 전반: 명령 exit가 아니라 desired == observed)
