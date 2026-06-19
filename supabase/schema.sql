@@ -519,3 +519,207 @@ $$;
 
 -- /metrics(anon)에서 호출. 집계만 노출하므로 anon 허용.
 grant execute on function public.metrics_snapshot() to anon, authenticated;
+
+-- ============================================================================
+-- admin ops : 운영용 권한 모델 + 관리 함수 (실패/stuck job 조회·재처리·orphan 파일)
+--   원칙(최소권한): web에 service_role(god-mode 키)을 두지 않는다. 대신
+--     ① user_roles 로 관리자를 식별하고
+--     ② 권한이 필요한 작업은 SECURITY DEFINER 함수로 묶되 함수 내부에서 is_admin()을
+--        재검증한다(앱 레이어만 믿지 않음 = defense in depth). 일반 테이블 RLS는 owner-only 유지.
+--     ③ 변경(재처리 등)은 admin_audit 에 누가·언제·무엇을 기록한다.
+-- ============================================================================
+
+-- 1) 역할 테이블 + 관리자 판별 -------------------------------------------------
+create table if not exists public.user_roles (
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  role       text not null check (role in ('admin')),
+  created_at timestamptz not null default now(),
+  primary key (user_id, role)
+);
+
+alter table public.user_roles enable row level security;
+-- 사용자는 자기 역할만 조회 가능. 부여/회수는 SQL(service_role)로만 — insert/update 정책 없음 → 차단.
+drop policy if exists "user_roles self-read" on public.user_roles;
+create policy "user_roles self-read" on public.user_roles
+  for select using (auth.uid() = user_id);
+
+-- 현재 호출자가 admin인지. SECURITY DEFINER 로 user_roles RLS를 우회해 직접 조회한다
+-- (RLS 재귀 회피). auth.uid()는 definer여도 '호출자' 기준으로 유지된다.
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.user_roles
+    where user_id = auth.uid() and role = 'admin'
+  );
+$$;
+
+-- 2) 감사 로그 (권한 작업 추적) ------------------------------------------------
+create table if not exists public.admin_audit (
+  id         bigint generated always as identity primary key,
+  actor      uuid not null,            -- 수행한 관리자 (auth.uid())
+  action     text not null,            -- 예: 'requeue_job'
+  target     text,                     -- 대상 식별자 (job_id 등)
+  detail     jsonb,                    -- 부가 정보
+  created_at timestamptz not null default now()
+);
+alter table public.admin_audit enable row level security;
+-- admin만 열람. 쓰기는 SECURITY DEFINER 함수로만 — insert 정책 없음 → 직접 기록 차단.
+drop policy if exists "admin_audit admin-read" on public.admin_audit;
+create policy "admin_audit admin-read" on public.admin_audit
+  for select using (public.is_admin());
+
+-- 3) 관리 함수 (전부 SECURITY DEFINER + 진입 시 is_admin() 재검증) ---------------
+
+-- 실패 job 목록(asset 조인). RLS 우회 → 전체 사용자 범위로 조회한다.
+create or replace function public.admin_failed_jobs(p_limit int default 100)
+returns table (
+  job_id       uuid,
+  asset_id     uuid,
+  user_id      uuid,
+  type         text,
+  attempts     int,
+  max_attempts int,
+  last_error   text,
+  asset_status text,
+  error_code   text,
+  source_path  text,
+  updated_at   timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'forbidden: admin only' using errcode = '42501';
+  end if;
+  return query
+    select j.id, j.asset_id, j.user_id, j.type, j.attempts, j.max_attempts,
+           j.last_error, a.status, a.error_code, a.source_path, j.updated_at
+    from public.jobs j
+    join public.proof_assets a on a.id = j.asset_id
+    where j.status = 'failed'
+    order by j.updated_at desc
+    limit p_limit;
+end;
+$$;
+
+-- stuck job: processing 인데 locked_at이 p_minutes 이상 지난 것(워커가 죽어 멈춘 것으로 추정).
+create or replace function public.admin_stuck_jobs(p_minutes int default 5)
+returns table (
+  job_id        uuid,
+  asset_id      uuid,
+  user_id       uuid,
+  attempts      int,
+  locked_by     text,
+  locked_at     timestamptz,
+  minutes_stuck numeric
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'forbidden: admin only' using errcode = '42501';
+  end if;
+  return query
+    select j.id, j.asset_id, j.user_id, j.attempts, j.locked_by, j.locked_at,
+           round((extract(epoch from (now() - j.locked_at)) / 60)::numeric, 1)
+    from public.jobs j
+    where j.status = 'processing'
+      and j.locked_at is not null
+      and j.locked_at < now() - make_interval(mins => p_minutes)
+    order by j.locked_at asc;
+end;
+$$;
+
+-- 재처리: 실패/stuck job을 다시 pending으로(attempts 리셋·run_after=now·잠금 해제).
+-- asset도 재처리 대기('uploaded')로 되돌린다(enqueue 트리거는 insert만 반응하므로 중복 job 안 생김).
+-- 누가 무엇을 재처리했는지 admin_audit에 기록한다.
+create or replace function public.admin_requeue_job(p_job_id uuid)
+returns public.jobs
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_job public.jobs;
+begin
+  if not public.is_admin() then
+    raise exception 'forbidden: admin only' using errcode = '42501';
+  end if;
+
+  update public.jobs
+  set status = 'pending', attempts = 0, run_after = now(),
+      locked_at = null, locked_by = null, last_error = null
+  where id = p_job_id
+  returning * into v_job;
+
+  if not found then
+    raise exception 'job not found: %', p_job_id using errcode = 'no_data_found';
+  end if;
+
+  update public.proof_assets
+  set status = 'uploaded', error_code = null, error_message = null
+  where id = v_job.asset_id;
+
+  insert into public.admin_audit (actor, action, target, detail)
+  values (auth.uid(), 'requeue_job', p_job_id::text,
+          jsonb_build_object('asset_id', v_job.asset_id));
+
+  return v_job;
+end;
+$$;
+
+-- orphan: media 버킷에 있으나 어떤 proof_assets(source_path/thumb_path)도 참조하지 않는 파일.
+-- (asset insert 실패로 파일만 남았거나, asset 삭제 후 파일이 잔존한 경우 등)
+create or replace function public.admin_orphans(p_limit int default 100)
+returns table (
+  object_name text,
+  size_bytes  bigint,
+  created_at  timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'forbidden: admin only' using errcode = '42501';
+  end if;
+  return query
+    select o.name,
+           (o.metadata->>'size')::bigint,
+           o.created_at
+    from storage.objects o
+    where o.bucket_id = 'media'
+      and not exists (
+        select 1 from public.proof_assets a
+        where a.source_path = o.name or a.thumb_path = o.name
+      )
+    order by o.created_at desc
+    limit p_limit;
+end;
+$$;
+
+-- 함수 권한: 익명 차단, 로그인 사용자만 호출 가능(내부에서 다시 is_admin() 검증).
+revoke all on function public.admin_failed_jobs(int)  from public;
+revoke all on function public.admin_stuck_jobs(int)   from public;
+revoke all on function public.admin_requeue_job(uuid) from public;
+revoke all on function public.admin_orphans(int)      from public;
+grant execute on function public.is_admin()              to authenticated;
+grant execute on function public.admin_failed_jobs(int)  to authenticated;
+grant execute on function public.admin_stuck_jobs(int)   to authenticated;
+grant execute on function public.admin_requeue_job(uuid) to authenticated;
+grant execute on function public.admin_orphans(int)      to authenticated;
+
+-- 관리자 등록(최초 1회, 본인 계정만): SQL editor에서 직접 실행한다(앱으로 부여 불가 — 의도적).
+--   insert into public.user_roles (user_id, role)
+--   values ('<your-auth-uid>', 'admin') on conflict do nothing;
+--   (user_id는 Supabase Authentication > Users 에서 확인)
