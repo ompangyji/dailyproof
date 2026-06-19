@@ -1708,6 +1708,10 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - 부하 측정(k6·`/metrics` 병목)은 했지만, "사용자 증가 시 어디가 먼저 막히고 무엇부터 확장하나"를 정리한 문서가 없었다(계획서 4.13).
 
+**목적 (솔직히)**
+
+- 지금 실제 트래픽·부하가 있어서 확장이 *필요한* 게 아니다. **나중에 부하가 늘 때를 대비해 ① 확장 순서를 미리 정해두고 ② 첫 단계(오토스케일)를 매니페스트로 준비**해 두는 것. 현재 문제 해결이 아니라 **"확장을 설계·구성할 줄 안다 + 부하 오면 바로 켤 수 있다"** 를 위한 준비라, 오토스케일은 차트에 넣되 **기본 off**.
+
 **한 일**
 
 - `docs/architecture/scaling.md` — 현재 구조(web stateless·worker 폴링·jobs 테이블 큐·Supabase) 기준으로 병목 컴포넌트 식별과 확장 순서 정리.
@@ -1722,9 +1726,11 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - 계획서 4.13 완료기준(병목 식별·분리 순서·web/worker/storage/queue 어디 먼저) 충족. 회고와 중복 없는 net-new 종합.
 
-**문서 → 구현 (HPA/KEDA)**
+**문서 → 구성 (오토스케일 매니페스트)**
 
-- 분석에서 그친 게 아니라 매니페스트로 실제 추가: `templates/web-hpa.yaml`(HPA v2, CPU — metrics-server 필요, k3s 번들이라 즉시 동작) + `templates/worker-scaledobject.yaml`(KEDA ScaledObject, `pending` 큐 깊이 — KEDA 설치 전제). `values.autoscaling`으로 토글, 켜지면 Deployment의 정적 `replicas`는 조건부 생략(오토스케일러가 관리).
+- 용어 정정: 매니페스트는 절차적 코드가 아니라 **선언형 설정**(원하는 상태를 기술)이다. k8s에선 오토스케일을 코드로 짜는 게 아니라 **매니페스트로 선언**하면 컨트롤러(HPA 컨트롤러·KEDA)가 실제 스케일링을 *수행*한다. 그래서 "구현"보다 **"오토스케일 매니페스트를 추가·구성"** 이 정확.
+- **왜 web=HPA, worker=KEDA**: web은 HTTP를 받느라 CPU-bound라 CPU로 늘리면 됨 → k8s 네이티브 **HPA(CPU)** 가 표준·최소(CPU는 metrics-server가 줌). worker는 폴링이라 **CPU가 한가해도 큐(pending)가 쌓일 수** 있어 큐 깊이로 늘려야 하는데, plain HPA는 CPU/메모리만 봄 → 큐·이벤트 기반 오토스케일의 표준 도구인 **KEDA**를 채택(컴포넌트 추가라 "최소"는 아님, "용도에 맞는 도구").
+- 추가한 것: `templates/web-hpa.yaml`(HPA v2, CPU — k3s 번들 metrics-server로 즉시 동작) + `templates/worker-scaledobject.yaml`(KEDA ScaledObject + TriggerAuthentication, `pending` 큐 깊이 — KEDA 설치 전제). `values.autoscaling`으로 토글, 켜지면 Deployment의 정적 `replicas`는 조건부 생략(오토스케일러가 관리).
 - 검증(빌드): helm lint·template — off에선 HPA 리소스 0·replicas 2, on(`--set …enabled=true`)에선 HPA·ScaledObject·TriggerAuthentication 각 1·replicas 0. 유효 YAML.
 - 검증(런타임): web HPA를 k3s에 적용 → `kubectl get hpa`에서 `TARGETS cpu: 4%/70%`·MIN 1/MAX 5/REPLICAS 1로 **실제 동작 확인**(metrics-server가 web CPU 실측, 부하 없어 1개 유지). worker KEDA는 KEDA 미설치라 매니페스트로만 둠.
 
