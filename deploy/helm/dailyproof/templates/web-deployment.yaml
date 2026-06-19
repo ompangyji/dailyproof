@@ -6,7 +6,9 @@ metadata:
     {{- include "dailyproof.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
 spec:
-  replicas: {{ .Values.web.replicas }}
+  {{- if not .Values.autoscaling.web.enabled }}
+  replicas: {{ .Values.web.replicas }} # autoscaling 켜지면 HPA가 관리(여기선 생략)
+  {{- end }}
   selector:
     matchLabels:
       {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "web") | nindent 6 }}

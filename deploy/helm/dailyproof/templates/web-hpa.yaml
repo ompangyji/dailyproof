@@ -1,0 +1,25 @@
+{{- if .Values.autoscaling.web.enabled }}
+# web 수평 오토스케일(CPU 기준). metrics-server 필요(k3s는 기본 번들 → 즉시 동작).
+# 켜면 web Deployment의 정적 replicas는 생략된다(HPA가 관리).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-web
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "dailyproof.fullname" . }}-web
+  minReplicas: {{ .Values.autoscaling.web.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.web.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.web.targetCPUUtilizationPercentage }}
+{{- end }}
