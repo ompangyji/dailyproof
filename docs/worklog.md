@@ -1778,3 +1778,31 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `139-admin-ops-deadletter-before-20260620.png` — 실패 job 행의 재처리/포기(사유 입력) 버튼.
 - `140-admin-ops-deadletter-after-20260620.png` — 사유와 함께 포기 → dead 섹션으로 이동, 실패 목록 0.
 - `141-admin-audit-dead-letter-20260620.png` — `admin_audit`에 `dead_letter`+사유 감사 기록.
+
+## 2026-06-20
+
+### 1. 비용 관점 문서(cost.md)
+
+**이전 상태 / 문제**
+
+- 스토리지·로그·트래픽·메트릭 비용을 의식한 설계 조각들은 코드에 흩어져 있었지만(thumbnail·`/metrics` 캐시·orphan 회수·autoscale off 등), "이 스택에서 비용이 어디서 나고 어떻게 줄이나"를 한곳에 정리한 문서가 없었다(계획서 4.11).
+
+**목적 (솔직히)**
+
+- 지금은 Supabase 무료 티어 + 로컬 k3s라 **실제 청구액 ≈ 0**. 깎을 비용이 실재하지 않아 "비용을 실제로 줄이는 행동"은 의미가 없다. 그래서 이 작업은 **① 비용 드라이버 식별 ② 이미 비용을 의식해 넣어둔 레버를 "비용 관점"으로 재정리 ③ 아직 안 한 것은 보존주기·샘플링 등 정책으로 선언**하는 문서. 사용량이 붙을 때 어디를 줄일지 미리 정해두는 준비(scaling.md와 같은 성격).
+
+**한 일**
+
+- `docs/architecture/cost.md` — 4개 드라이버(스토리지·로그·아웃바운드 트래픽·메트릭)별로 "무엇이 비용을 키우나 → 이미 한 레버 / 정책"을 정리 + 보존주기·샘플링·thumbnail **정책 표**.
+
+**핵심 설계 (이미 한 것을 비용 관점으로 묶음 — hand-wavy 방지)**
+
+- **스토리지**: worker thumbnail/리사이즈·`checksum` 중복 제거·**admin ops orphan 회수**·8MB 상한(버킷+DB constraint).
+- **메트릭**: **`/metrics` TTL 캐시+single-flight**(부하·비용 동시 절감), 집계만 노출로 카디널리티 억제.
+- **로그**: `LOG_LEVEL=info`(prod debug 끔), 고볼륨 폴링 경로 억제 정책.
+- **egress**: CDN·thumbnail 우선 서빙·캐시 헤더(대부분 트래픽 생길 때 적용할 정책).
+- **idle 비용**: autoscale 기본 off+min 1, worker 폴링 간격(`WORKER_POLL_IDLE_MS`)·`LISTEN/NOTIFY` 전환 여지 → scaling.md와 연결.
+
+**검증**
+
+- 계획서 4.11 완료기준(4개 드라이버 절감 전략 + 보존주기·샘플링·thumbnail 정책) 충족. 새 코드 없음(문서 전용), 기존 구현을 근거로 인용해 검증 가능하게 작성. README 인덱스 추가.

@@ -89,6 +89,7 @@
 - [x] `architecture/network.md` — 트래픽 흐름(Ingress)·HTTP/HTTPS·body size·timeout 정책
 - [x] `architecture/target-architecture.md` — 목표 아키텍처 + 핵심 시나리오
 - [x] `architecture/scaling.md` — 확장성(병목 컴포넌트 식별·확장 순서: web HPA→worker 큐깊이 HPA→DB 완화→큐 분리, 실측 근거)
+- [x] `architecture/cost.md` — 비용 관점(스토리지·로그·egress·메트릭 4드라이버 절감 전략 + 보존주기·샘플링·thumbnail 정책. 기존 레버 재정리 + 정책 선언)
 - [x] `architecture/environments.md` — dev/staging/prod 환경 분리 전략
 - [x] `architecture/branching.md` — 브랜치 전략(GitHub Flow + 환경 승격)
 - [x] `plan/notion-sync.md` — docs→Notion 동기화 설계 (구현: `scripts/notion-sync.mjs` + `.github/workflows/notion-sync.yml`)
