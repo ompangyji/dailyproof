@@ -49,7 +49,7 @@ spec:
             {{- toYaml .Values.web.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true # 루트FS 읽기전용 — 침입 시 디스크 변조·실행파일 작성 차단
+            # [DEMO] readOnlyRootFilesystem 일부러 제거 → KSV-0014 HIGH 재발 → hard gate가 막는지 시연(merge 금지)
             capabilities:
               drop: ["ALL"]
           # readOnlyRootFilesystem라 앱이 써야 하는 경로만 emptyDir로 연다.
