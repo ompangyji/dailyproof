@@ -25,9 +25,19 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: smoke
           image: "{{ .Values.postSyncSmoke.image }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -44,4 +54,7 @@ spec:
               curl -fsS "$BASE/health/live"  | grep -q '"status":"ok"'          || { echo "FAIL: /health/live"; exit 1; }
               curl -fsS "$BASE/metrics"      | grep -q 'dailyproof_jobs_total'  || { echo "FAIL: /metrics"; exit 1; }
               echo "post-deploy smoke OK"
+      volumes:
+        - name: tmp
+          emptyDir: {}
 {{- end }}

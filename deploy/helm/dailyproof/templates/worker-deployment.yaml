@@ -18,6 +18,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault # 허용 syscall 제한(런타임 기본 프로파일)
       containers:
         - name: worker
           image: "{{ .Values.image.worker.repository }}:{{ .Values.image.worker.tag }}"
@@ -28,11 +30,18 @@ spec:
             {{- toYaml .Values.worker.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true # 루트FS 읽기전용
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           # worker는 ConfigMap(비밀 아님) + Secret(service_role) 둘 다 주입.
           envFrom:
             - configMapRef:
                 name: {{ include "dailyproof.fullname" . }}-config
             - secretRef:
                 name: {{ include "dailyproof.fullname" . }}-secret
+      volumes:
+        - name: tmp
+          emptyDir: {}

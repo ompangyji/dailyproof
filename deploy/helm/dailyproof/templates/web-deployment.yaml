@@ -18,6 +18,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault # 허용 syscall 제한(런타임 기본 프로파일)
       containers:
         - name: web
           image: "{{ .Values.image.web.repository }}:{{ .Values.image.web.tag }}"
@@ -47,8 +49,15 @@ spec:
             {{- toYaml .Values.web.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true # 루트FS 읽기전용 — 침입 시 디스크 변조·실행파일 작성 차단
             capabilities:
               drop: ["ALL"]
+          # readOnlyRootFilesystem라 앱이 써야 하는 경로만 emptyDir로 연다.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/.next/cache # Next 런타임 캐시 쓰기 경로
           # 비밀 아닌 설정은 ConfigMap에서 주입. web은 service_role(시크릿)을 쓰지 않아 Secret 미참조.
           envFrom:
             - configMapRef:
@@ -56,3 +65,8 @@ spec:
           env:
             - name: OTEL_SERVICE_NAME
               value: dailyproof-web
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
