@@ -1737,3 +1737,39 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - `134-deploy-web-hpa-active-20260619.png` — web HPA 적용 후 `get hpa`가 `cpu: 4%/70%`로 web CPU를 실측·감시(오토스케일 동작).
+
+### 7. 운영 콘솔(admin ops) — 실패/stuck job 재처리·orphan 조회
+
+**이전 상태 / 문제**
+
+- 후처리가 실패하거나(`failed`) 워커가 죽어 `processing`에 멈춘(stuck) job을 **운영자가 확인·재처리할 수단이 없었다**. 스토리지엔 참조 없는 orphan object가 쌓여도 알 길이 없었다(계획서 4.14). 지금까지는 DB를 직접 만져야만 했음.
+
+**목적**
+
+- 장애·적체를 **앱에서 안전하게 다룰 운영 기능**을 만든다. 단, "현업에서 쓸 스펙"을 기준으로 — 즉 **service_role(god-mode 키)을 web에 두지 않고** 최소권한·다층 인가·감사로그를 갖춘 형태로.
+
+**한 일**
+
+- `/admin/ops` 페이지(server component) + `requeueJobAction` server action.
+- 기능 4가지: **실패 job 조회**(error_code·attempts·last_error) / **stuck job 조회**(5분+ `processing`) / **재처리(requeue)** / **orphan object 조회**(media 버킷 ⨯ `proof_assets` 미참조).
+- DB(`supabase/schema.sql`)에 권한 모델 추가: `user_roles`+`is_admin()`, 감사 테이블 `admin_audit`, 관리 RPC `admin_failed_jobs`/`admin_stuck_jobs`/`admin_requeue_job`/`admin_orphans`.
+
+**핵심 설계 (현업 스펙 = 최소권한 + defense in depth + 감사)**
+
+- **web에 service_role을 안 둔다**: 일반 테이블 RLS는 owner-only 유지하고, 관리 권한만 `SECURITY DEFINER` RPC로 격리. web이 뚫려도 god-mode 키가 새지 않음.
+- **다층 인가**: ① 페이지 진입 시 `is_admin()` 게이트(비-admin엔 404로 존재 자체를 숨김) ② RPC 내부에서 다시 `is_admin()` 재검증(앱 레이어만 믿지 않음). 한 층 우회해도 DB에서 막힘.
+- **감사**: 재처리 같은 권한 작업은 `admin_audit`에 actor·action·target·시각 기록. 역할 부여는 SQL로만(앱에서 불가, 의도적).
+- **재처리 의미**: job을 `pending`+attempts 리셋+잠금 해제, asset을 `uploaded`로 복귀. enqueue 트리거는 insert에만 반응하므로 중복 job이 생기지 않음. stuck 판정은 `locked_at` 경과로 한다.
+- `is_admin()`을 `SECURITY DEFINER`로 둬 `user_roles` RLS 재귀를 피함(`auth.uid()`는 호출자 기준 유지).
+
+**검증**
+
+- 코드: tsc 에러 0, `next build` 번들 컴파일 성공(타입체크 단계의 playwright 오류는 로컬 devDependency 미설치 환경 한계로 무관).
+- 동작(브라우저+SQL editor): ① 실패 job 조회(`download_failed`) → ② **재처리** 클릭 후 실패 목록 0으로 비워짐 → ③ `admin_audit`에 `requeue_job` 행 적재 → ④ admin 권한 제거 후 `/admin/ops` 접속 시 **404**(권한 차단). 정상·비정상 모두 확인.
+
+**자료**
+
+- `135-admin-ops-failed-list-20260619.png` — 실패 job 조회(재처리 전, error_code·재처리 버튼).
+- `136-admin-ops-requeued-20260619.png` — 재처리 후 실패 작업 0.
+- `137-admin-audit-requeue-log-20260619.png` — `admin_audit`에 `requeue_job` 감사 기록.
+- `138-admin-ops-forbidden-404-20260619.png` — 비-admin 접근 시 404(서버 권한 강제).
