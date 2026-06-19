@@ -1582,3 +1582,45 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - k6 결과 원본을 `docs/performance/results/`에 커밋 — baseline(before)/after 시리즈 txt·json. 표·분석은 `performance/performance.md`.
+
+## 2026-06-19
+
+### 1. CI 보안 스캐닝 도입 + findings 정리(triage·하드닝)
+
+**이전 상태 / 문제**
+
+- CI에 보안 스캔이 전무했다 — 취약점(CVE)·시크릿·IaC 오설정·소스(SAST) 검증이 하나도 없었다.
+- 보안 인증(ISO 27001/ISMS-P 등)이 요구하는 "기술 통제"를 파이프라인으로 자동 검증·증명할 필요. ("인증 취득"이 아니라 통제를 코드로 강제·검증한 경험)
+
+**목적**
+
+- shift-left 보안 스캐닝을 CI에 붙여 배포 전 자동 검증. 도구가 올린 findings를 triage(선별)→수정/억제로 닫고, 최종적으로 merge gate화.
+
+**한 일**
+
+- 보안 스캐닝 CI(`security.yml`·`codeql.yml`·`dependabot.yml`): gitleaks(시크릿 히스토리)·trivy(CVE+IaC 오설정+시크릿)·CodeQL(SAST)·Dependabot(의존성)·SBOM(CycloneDX). 결과는 SARIF로 GitHub Security 탭. 처음엔 soft(경보).
+- repo를 **public 전환** — Code scanning·CodeQL은 private 개인 repo에선 유료(GitHub Code Security)라 무료로 쓰려면 public. 전환 전 gitleaks로 **히스토리 시크릿 0** 확인.
+- **findings triage**: 스캐너 28건을 FIX/CodeQL/SUPPRESS로 분류·판정(`docs/security/findings-triage.md`).
+- **하드닝**: web·worker·smoke에 `readOnlyRootFilesystem`+쓰기용 emptyDir, `seccompProfile: RuntimeDefault`, smoke 최소권한·resources. grass SVG의 bg를 검증된 정수에서 재구성(CodeQL reflected XSS FP 정리). accepted findings는 `.trivyignore`로 사유와 함께 억제.
+
+**핵심 설계**
+
+- shift-left: "배포 전(CI)에 잡는다". 도구가 규칙을 아는 출처는 셋 — CVE 공개DB(MITRE→NVD→GHSA) / 정책 코드룰(CIS를 코드화) / SAST 패턴(CWE). 상세는 회고 `security-scanning.md`.
+- **triage는 도구가 아니라 사람의 판단**(real/FP, fix/accept). 안 고칠 건 **사유를 남겨 accepted risk로** 기록(`findings-triage.md`).
+
+**검증**
+
+- trivy: before KSV-0014(readOnlyRootFilesystem) HIGH ×3 → 하드닝 후 0. 억제까지 한 뒤 **전 템플릿 misconfig 0**(HIGH/CRITICAL 0).
+- 하드닝 런타임(ArgoCD로 브랜치 sync): web·worker `Healthy`, PostSync smoke `OK`, web 로그 **EROFS 없음**(readOnly가 앱 안 깨뜨림).
+- gitleaks: **No leaks detected**(히스토리 전체).
+
+**자료**
+
+- `docs/security/scans/`: `trivy-fs-first`(before, KSV-0014 ×3)·`trivy-after-harden`(0)·`trivy-misconfig-all`(LOW/MED 목록)·`trivy-after-suppress`(0).
+- Security 탭 Code scanning findings 스샷(trivy+CodeQL, "All tools working").
+- 회고 `retrospective/security-scanning.md`, triage `docs/security/findings-triage.md`.
+
+**비고 / 후속**
+
+- 막힌 지점: ① private라 Code scanning 불가(→public) ② trivy-action 태그가 `v` 접두사(`v0.36.0`)라 `0.29.0`/`0.28.0`은 미존재(→`git ls-remote`로 확인 후 정정) ③ `.trivyignore` ID는 틀리면 조용히 무효 → 재스캔으로 검증.
+- 후속: soft → **hard gate** 전환(misconfig 0이라 통과 예상).
