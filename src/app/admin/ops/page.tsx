@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requeueJobAction } from "@/app/actions/admin";
+import { requeueJobAction, deadLetterJobAction } from "@/app/actions/admin";
 
 // 운영 데이터(실패/stuck job, orphan)는 매 요청 최신이어야 한다.
 export const dynamic = "force-dynamic";
@@ -29,6 +29,15 @@ type StuckJob = {
   minutes_stuck: number;
 };
 
+type DeadJob = {
+  job_id: string;
+  asset_id: string;
+  user_id: string;
+  attempts: number;
+  last_error: string | null;
+  updated_at: string;
+};
+
 type Orphan = {
   object_name: string;
   size_bytes: number | null;
@@ -54,6 +63,28 @@ function RequeueButton({ jobId }: { jobId: string }) {
   );
 }
 
+// 영구 실패(poison) job 종결. 사유 입력 후 제출 → dead 상태로 빠지고 감사 로그에 남는다.
+function DeadLetterForm({ jobId }: { jobId: string }) {
+  return (
+    <form action={deadLetterJobAction} className="flex items-center gap-1">
+      <input type="hidden" name="job_id" value={jobId} />
+      <input
+        type="text"
+        name="reason"
+        required
+        placeholder="포기 사유"
+        className="w-28 rounded border px-1 py-0.5 text-xs"
+      />
+      <button
+        type="submit"
+        className="rounded bg-gray-700 px-2 py-1 text-xs font-medium text-white hover:bg-gray-800"
+      >
+        포기
+      </button>
+    </form>
+  );
+}
+
 export default async function AdminOpsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -64,14 +95,16 @@ export default async function AdminOpsPage() {
   const { data: isAdmin } = await supabase.rpc("is_admin");
   if (!isAdmin) notFound();
 
-  const [failedRes, stuckRes, orphanRes] = await Promise.all([
+  const [failedRes, stuckRes, deadRes, orphanRes] = await Promise.all([
     supabase.rpc("admin_failed_jobs", { p_limit: 100 }),
     supabase.rpc("admin_stuck_jobs", { p_minutes: 5 }),
+    supabase.rpc("admin_dead_jobs", { p_limit: 100 }),
     supabase.rpc("admin_orphans", { p_limit: 100 }),
   ]);
 
   const failed = (failedRes.data ?? []) as FailedJob[];
   const stuck = (stuckRes.data ?? []) as StuckJob[];
+  const dead = (deadRes.data ?? []) as DeadJob[];
   const orphans = (orphanRes.data ?? []) as Orphan[];
 
   return (
@@ -113,7 +146,12 @@ export default async function AdminOpsPage() {
                       {j.last_error ?? "—"}
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmt(j.updated_at)}</td>
-                    <td className="py-2 pr-3"><RequeueButton jobId={j.job_id} /></td>
+                    <td className="py-2 pr-3">
+                      <div className="flex items-center gap-2">
+                        <RequeueButton jobId={j.job_id} />
+                        <DeadLetterForm jobId={j.job_id} />
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -150,6 +188,47 @@ export default async function AdminOpsPage() {
                     <td className="py-2 pr-3 font-mono text-xs">{j.locked_by ?? "—"}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmt(j.locked_at)}</td>
                     <td className="py-2 pr-3">{j.minutes_stuck}</td>
+                    <td className="py-2 pr-3"><RequeueButton jobId={j.job_id} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* dead-letter (포기된 작업) */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">
+          포기된 작업 (dead-letter) <span className="text-gray-400">({dead.length})</span>
+        </h2>
+        <p className="text-xs text-gray-400">
+          영구 실패(poison)로 재처리를 포기한 작업 — 재처리해도 같은 실패가 반복되는 것. 근본 원인이
+          해소되면 재처리로 되살릴 수 있다.
+        </p>
+        {dead.length === 0 ? (
+          <p className="text-sm text-gray-500">포기된 작업이 없습니다.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b text-xs uppercase text-gray-500">
+                <tr>
+                  <th className="py-2 pr-3">job</th>
+                  <th className="py-2 pr-3">시도</th>
+                  <th className="py-2 pr-3">사유 / last_error</th>
+                  <th className="py-2 pr-3">갱신</th>
+                  <th className="py-2 pr-3">작업</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dead.map((j) => (
+                  <tr key={j.job_id} className="border-b align-top">
+                    <td className="py-2 pr-3 font-mono text-xs">{j.job_id.slice(0, 8)}</td>
+                    <td className="py-2 pr-3">{j.attempts}</td>
+                    <td className="py-2 pr-3 max-w-xs truncate" title={j.last_error ?? ""}>
+                      {j.last_error ?? "—"}
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">{fmt(j.updated_at)}</td>
                     <td className="py-2 pr-3"><RequeueButton jobId={j.job_id} /></td>
                   </tr>
                 ))}

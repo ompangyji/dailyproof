@@ -708,16 +708,92 @@ begin
 end;
 $$;
 
+-- 4) dead-letter : 영구 실패(poison) job 종결 -------------------------------
+-- transient 실패는 admin_requeue_job(재처리)로 풀리지만, 원본 파일 없음·손상 같은
+-- permanent 실패는 재처리해도 같은 실패가 무한 반복된다. 그런 job을 'dead'로 빼서
+-- 재처리 루프(claim_job은 pending만 집음)와 failed 목록에서 제거하고 운영자가 종결한다.
+-- 근본 원인이 해소되면 admin_requeue_job 으로 되살릴 수 있다(id로 pending 전환).
+alter table public.jobs drop constraint if exists jobs_status_check;
+alter table public.jobs add constraint jobs_status_check
+  check (status in ('pending', 'processing', 'done', 'failed', 'dead'));
+
+-- job을 dead로 종결(사유 필수). 사유는 last_error에 남기고 admin_audit에 기록한다.
+create or replace function public.admin_dead_letter_job(p_job_id uuid, p_reason text)
+returns public.jobs
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_job    public.jobs;
+  v_reason text := nullif(btrim(p_reason), '');
+begin
+  if not public.is_admin() then
+    raise exception 'forbidden: admin only' using errcode = '42501';
+  end if;
+  if v_reason is null then
+    raise exception 'dead-letter 사유는 필수입니다' using errcode = 'check_violation';
+  end if;
+
+  update public.jobs
+  set status = 'dead', locked_at = null, locked_by = null,
+      last_error = 'dead-letter: ' || v_reason
+  where id = p_job_id
+  returning * into v_job;
+
+  if not found then
+    raise exception 'job not found: %', p_job_id using errcode = 'no_data_found';
+  end if;
+
+  insert into public.admin_audit (actor, action, target, detail)
+  values (auth.uid(), 'dead_letter', p_job_id::text,
+          jsonb_build_object('asset_id', v_job.asset_id, 'reason', v_reason));
+
+  return v_job;
+end;
+$$;
+
+-- dead job 목록(투명성: 무엇을 왜 포기했는지 운영자가 확인).
+create or replace function public.admin_dead_jobs(p_limit int default 100)
+returns table (
+  job_id     uuid,
+  asset_id   uuid,
+  user_id    uuid,
+  attempts   int,
+  last_error text,
+  updated_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'forbidden: admin only' using errcode = '42501';
+  end if;
+  return query
+    select j.id, j.asset_id, j.user_id, j.attempts, j.last_error, j.updated_at
+    from public.jobs j
+    where j.status = 'dead'
+    order by j.updated_at desc
+    limit p_limit;
+end;
+$$;
+
 -- 함수 권한: 익명 차단, 로그인 사용자만 호출 가능(내부에서 다시 is_admin() 검증).
-revoke all on function public.admin_failed_jobs(int)  from public;
-revoke all on function public.admin_stuck_jobs(int)   from public;
-revoke all on function public.admin_requeue_job(uuid) from public;
-revoke all on function public.admin_orphans(int)      from public;
-grant execute on function public.is_admin()              to authenticated;
-grant execute on function public.admin_failed_jobs(int)  to authenticated;
-grant execute on function public.admin_stuck_jobs(int)   to authenticated;
-grant execute on function public.admin_requeue_job(uuid) to authenticated;
-grant execute on function public.admin_orphans(int)      to authenticated;
+revoke all on function public.admin_failed_jobs(int)        from public;
+revoke all on function public.admin_stuck_jobs(int)         from public;
+revoke all on function public.admin_requeue_job(uuid)       from public;
+revoke all on function public.admin_orphans(int)            from public;
+revoke all on function public.admin_dead_letter_job(uuid, text) from public;
+revoke all on function public.admin_dead_jobs(int)          from public;
+grant execute on function public.is_admin()                    to authenticated;
+grant execute on function public.admin_failed_jobs(int)        to authenticated;
+grant execute on function public.admin_stuck_jobs(int)         to authenticated;
+grant execute on function public.admin_requeue_job(uuid)       to authenticated;
+grant execute on function public.admin_orphans(int)            to authenticated;
+grant execute on function public.admin_dead_letter_job(uuid, text) to authenticated;
+grant execute on function public.admin_dead_jobs(int)          to authenticated;
 
 -- 관리자 등록(최초 1회, 본인 계정만): SQL editor에서 직접 실행한다(앱으로 부여 불가 — 의도적).
 --   insert into public.user_roles (user_id, role)
