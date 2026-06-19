@@ -105,5 +105,5 @@
 - [x] `retrospective/metrics-load.md` — /metrics 부하 ~10초 행 회고(3-way 진단: 쿼리·REST·pod 경로 격리, 캐시·fail-fast·stale, 환경성 결론)
 - [x] `retrospective/security-scanning.md` — 보안 스캐닝 도입 전 이해 회고(도구가 규칙을 아는 출처: CVE DB / 정책 코드룰 / SAST 패턴)
 - [x] `security/findings-triage.md` — 스캐너 findings 28건 triage(real/FP·fix/suppress 판정·근거·사유 기록)
-- [ ] `incidents/incident-log.md` — 장애 재현 기록
+- [x] `incidents/incident-log.md` — 장애 등록부(실제 겪은 장애 5건 통일 포맷 요약·색인: 빈 build-arg readiness 503·ImagePullBackOff·/metrics 부하 행·CI 플레이크·PostSync hook 막힘. 상세는 회고·runbook으로 링크아웃)
 - [x] `performance/performance.md` — 성능 베이스라인(k6, 조회+DB vs 순수앱 대비·threshold·병목 가설)
