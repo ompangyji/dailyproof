@@ -1,0 +1,388 @@
+
+Report Summary
+
+┌───────────────────────────────────┬──────┬───────────────────┐
+│              Target               │ Type │ Misconfigurations │
+├───────────────────────────────────┼──────┼───────────────────┤
+│ templates/configmap.yaml          │ helm │         1         │
+├───────────────────────────────────┼──────┼───────────────────┤
+│ templates/ingress.yaml            │ helm │         0         │
+├───────────────────────────────────┼──────┼───────────────────┤
+│ templates/postsync-smoke-job.yaml │ helm │         8         │
+├───────────────────────────────────┼──────┼───────────────────┤
+│ templates/secret.yaml             │ helm │         0         │
+├───────────────────────────────────┼──────┼───────────────────┤
+│ templates/web-deployment.yaml     │ helm │         4         │
+├───────────────────────────────────┼──────┼───────────────────┤
+│ templates/web-service.yaml        │ helm │         0         │
+├───────────────────────────────────┼──────┼───────────────────┤
+│ templates/worker-deployment.yaml  │ helm │         4         │
+└───────────────────────────────────┴──────┴───────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+
+templates/configmap.yaml (helm)
+===============================
+Tests: 63 (SUCCESSES: 62, FAILURES: 1)
+Failures: 1 (UNKNOWN: 0, LOW: 0, MEDIUM: 1, HIGH: 0, CRITICAL: 0)
+
+KSV-01010 (MEDIUM): ConfigMap 'dailyproof-dailyproof-config' in 'default' namespace stores sensitive contents in key(s) or value(s) '{"NEXT_PUBLIC_SUPABASE_ANON_KEY", "WORKER_CALL_TIMEOUT_MS", "WORKER_POLL_IDLE_MS", "WORKER_RETRY_BASE_MS"}'
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Storing sensitive content such as usernames and email addresses in configMaps is unsafe
+
+See https://avd.aquasec.com/misconfig/ksv-01010
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+templates/postsync-smoke-job.yaml (helm)
+========================================
+Tests: 98 (SUCCESSES: 90, FAILURES: 8)
+Failures: 8 (UNKNOWN: 0, LOW: 7, MEDIUM: 1, HIGH: 0, CRITICAL: 0)
+
+KSV-0011 (LOW): Container 'smoke' of Job 'dailyproof-dailyproof-postsync-smoke' should set 'resources.limits.cpu'
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Enforcing CPU limits prevents DoS via resource exhaustion.
+
+See https://avd.aquasec.com/misconfig/ksv-0011
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/postsync-smoke-job.yaml:37-49
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  37 ┌         - name: smoke
+  38 │           image: "curlimages/curl:8.11.1"
+  39 │           securityContext:
+  40 │             allowPrivilegeEscalation: false
+  41 │             readOnlyRootFilesystem: true
+  42 │             capabilities:
+  43 │               drop: ["ALL"]
+  44 │           volumeMounts:
+  45 └             - name: tmp
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0015 (LOW): Container 'smoke' of Job 'dailyproof-dailyproof-postsync-smoke' should set 'resources.requests.cpu'
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+When containers have resource requests specified, the scheduler can make better decisions about which nodes to place pods on, and how to deal with resource contention.
+
+See https://avd.aquasec.com/misconfig/ksv-0015
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/postsync-smoke-job.yaml:37-49
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  37 ┌         - name: smoke
+  38 │           image: "curlimages/curl:8.11.1"
+  39 │           securityContext:
+  40 │             allowPrivilegeEscalation: false
+  41 │             readOnlyRootFilesystem: true
+  42 │             capabilities:
+  43 │               drop: ["ALL"]
+  44 │           volumeMounts:
+  45 └             - name: tmp
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0016 (LOW): Container 'smoke' of Job 'dailyproof-dailyproof-postsync-smoke' should set 'resources.requests.memory'
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+When containers have memory requests specified, the scheduler can make better decisions about which nodes to place pods on, and how to deal with resource contention.
+
+See https://avd.aquasec.com/misconfig/ksv-0016
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/postsync-smoke-job.yaml:37-49
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  37 ┌         - name: smoke
+  38 │           image: "curlimages/curl:8.11.1"
+  39 │           securityContext:
+  40 │             allowPrivilegeEscalation: false
+  41 │             readOnlyRootFilesystem: true
+  42 │             capabilities:
+  43 │               drop: ["ALL"]
+  44 │           volumeMounts:
+  45 └             - name: tmp
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0018 (LOW): Container 'smoke' of Job 'dailyproof-dailyproof-postsync-smoke' should set 'resources.limits.memory'
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Enforcing memory limits prevents DoS via resource exhaustion.
+
+See https://avd.aquasec.com/misconfig/ksv-0018
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/postsync-smoke-job.yaml:37-49
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  37 ┌         - name: smoke
+  38 │           image: "curlimages/curl:8.11.1"
+  39 │           securityContext:
+  40 │             allowPrivilegeEscalation: false
+  41 │             readOnlyRootFilesystem: true
+  42 │             capabilities:
+  43 │               drop: ["ALL"]
+  44 │           volumeMounts:
+  45 └             - name: tmp
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0020 (LOW): Container 'smoke' of Job 'dailyproof-dailyproof-postsync-smoke' should set 'securityContext.runAsUser' > 10000
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Force the container to run with user ID > 10000 to avoid conflicts with the host’s user table.
+
+See https://avd.aquasec.com/misconfig/ksv-0020
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/postsync-smoke-job.yaml:37-49
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  37 ┌         - name: smoke
+  38 │           image: "curlimages/curl:8.11.1"
+  39 │           securityContext:
+  40 │             allowPrivilegeEscalation: false
+  41 │             readOnlyRootFilesystem: true
+  42 │             capabilities:
+  43 │               drop: ["ALL"]
+  44 │           volumeMounts:
+  45 └             - name: tmp
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0021 (LOW): Container 'smoke' of Job 'dailyproof-dailyproof-postsync-smoke' should set 'securityContext.runAsGroup' > 10000
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Force the container to run with group ID > 10000 to avoid conflicts with the host’s user table.
+
+See https://avd.aquasec.com/misconfig/ksv-0021
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/postsync-smoke-job.yaml:37-49
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  37 ┌         - name: smoke
+  38 │           image: "curlimages/curl:8.11.1"
+  39 │           securityContext:
+  40 │             allowPrivilegeEscalation: false
+  41 │             readOnlyRootFilesystem: true
+  42 │             capabilities:
+  43 │               drop: ["ALL"]
+  44 │           volumeMounts:
+  45 └             - name: tmp
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0110 (LOW): job dailyproof-dailyproof-postsync-smoke in default namespace should set metadata.namespace to a non-default namespace
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Checks whether a workload is running in the default namespace.
+
+See https://avd.aquasec.com/misconfig/ksv-0110
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/postsync-smoke-job.yaml:7-17
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   7 ┌ metadata:
+   8 │   name: dailyproof-dailyproof-postsync-smoke
+   9 │   labels:
+  10 │     app.kubernetes.io/name: dailyproof
+  11 │     app.kubernetes.io/instance: dailyproof
+  12 │     app.kubernetes.io/version: "0.1.0"
+  13 │     app.kubernetes.io/managed-by: Helm
+  14 │     app.kubernetes.io/component: smoke
+  15 └   annotations:
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0125 (MEDIUM): Container smoke in job dailyproof-dailyproof-postsync-smoke (namespace: default) uses an image from an untrusted registry.
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Ensure that all containers use images only from trusted registry domains.
+
+See https://avd.aquasec.com/misconfig/ksv-0125
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/postsync-smoke-job.yaml:37-49
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  37 ┌         - name: smoke
+  38 │           image: "curlimages/curl:8.11.1"
+  39 │           securityContext:
+  40 │             allowPrivilegeEscalation: false
+  41 │             readOnlyRootFilesystem: true
+  42 │             capabilities:
+  43 │               drop: ["ALL"]
+  44 │           volumeMounts:
+  45 └             - name: tmp
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+templates/web-deployment.yaml (helm)
+====================================
+Tests: 98 (SUCCESSES: 94, FAILURES: 4)
+Failures: 4 (UNKNOWN: 0, LOW: 3, MEDIUM: 1, HIGH: 0, CRITICAL: 0)
+
+KSV-0013 (MEDIUM): Container 'web' of Deployment 'dailyproof-dailyproof-web' should specify an image tag
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+It is best to avoid using the ':latest' image tag when deploying containers in production. Doing so makes it hard to track which version of the image is running, and hard to roll back the version.
+
+See https://avd.aquasec.com/misconfig/ksv-0013
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/web-deployment.yaml:32-80
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  32 ┌         - name: web
+  33 │           image: "dailyproof-web:latest"
+  34 │           imagePullPolicy: IfNotPresent
+  35 │           ports:
+  36 │             - name: http
+  37 │               containerPort: 3000
+  38 │           # 기존 헬스 엔드포인트를 k8s probe로 그대로 사용.
+  39 │           # liveness=살아있나(/health/live), readiness=트래픽 받을 준비(/health/ready: 의존성 점검).
+  40 └           livenessProbe:
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0020 (LOW): Container 'web' of Deployment 'dailyproof-dailyproof-web' should set 'securityContext.runAsUser' > 10000
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Force the container to run with user ID > 10000 to avoid conflicts with the host’s user table.
+
+See https://avd.aquasec.com/misconfig/ksv-0020
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/web-deployment.yaml:32-80
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  32 ┌         - name: web
+  33 │           image: "dailyproof-web:latest"
+  34 │           imagePullPolicy: IfNotPresent
+  35 │           ports:
+  36 │             - name: http
+  37 │               containerPort: 3000
+  38 │           # 기존 헬스 엔드포인트를 k8s probe로 그대로 사용.
+  39 │           # liveness=살아있나(/health/live), readiness=트래픽 받을 준비(/health/ready: 의존성 점검).
+  40 └           livenessProbe:
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0021 (LOW): Container 'web' of Deployment 'dailyproof-dailyproof-web' should set 'securityContext.runAsGroup' > 10000
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Force the container to run with group ID > 10000 to avoid conflicts with the host’s user table.
+
+See https://avd.aquasec.com/misconfig/ksv-0021
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/web-deployment.yaml:32-80
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  32 ┌         - name: web
+  33 │           image: "dailyproof-web:latest"
+  34 │           imagePullPolicy: IfNotPresent
+  35 │           ports:
+  36 │             - name: http
+  37 │               containerPort: 3000
+  38 │           # 기존 헬스 엔드포인트를 k8s probe로 그대로 사용.
+  39 │           # liveness=살아있나(/health/live), readiness=트래픽 받을 준비(/health/ready: 의존성 점검).
+  40 └           livenessProbe:
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0110 (LOW): deployment dailyproof-dailyproof-web in default namespace should set metadata.namespace to a non-default namespace
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Checks whether a workload is running in the default namespace.
+
+See https://avd.aquasec.com/misconfig/ksv-0110
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/web-deployment.yaml:4-11
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   4 ┌ metadata:
+   5 │   name: dailyproof-dailyproof-web
+   6 │   labels:
+   7 │     app.kubernetes.io/name: dailyproof
+   8 │     app.kubernetes.io/instance: dailyproof
+   9 │     app.kubernetes.io/version: "0.1.0"
+  10 │     app.kubernetes.io/managed-by: Helm
+  11 └     app.kubernetes.io/component: web
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+templates/worker-deployment.yaml (helm)
+=======================================
+Tests: 98 (SUCCESSES: 94, FAILURES: 4)
+Failures: 4 (UNKNOWN: 0, LOW: 3, MEDIUM: 1, HIGH: 0, CRITICAL: 0)
+
+KSV-0013 (MEDIUM): Container 'worker' of Deployment 'dailyproof-dailyproof-worker' should specify an image tag
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+It is best to avoid using the ':latest' image tag when deploying containers in production. Doing so makes it hard to track which version of the image is running, and hard to roll back the version.
+
+See https://avd.aquasec.com/misconfig/ksv-0013
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/worker-deployment.yaml:32-57
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  32 ┌         - name: worker
+  33 │           image: "dailyproof-worker:latest"
+  34 │           imagePullPolicy: IfNotPresent
+  35 │           # worker는 HTTP를 안 열어 httpGet probe 대상이 없다. 프로세스가 떠 있으면 살아있는 것으로 보고,
+  36 │           # 정밀 liveness(폴링 동작 확인)는 추후 메트릭/파일 기반 exec probe로 보강한다.
+  37 │           resources:
+  38 │             limits:
+  39 │               cpu: 500m
+  40 └               memory: 256Mi
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0020 (LOW): Container 'worker' of Deployment 'dailyproof-dailyproof-worker' should set 'securityContext.runAsUser' > 10000
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Force the container to run with user ID > 10000 to avoid conflicts with the host’s user table.
+
+See https://avd.aquasec.com/misconfig/ksv-0020
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/worker-deployment.yaml:32-57
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  32 ┌         - name: worker
+  33 │           image: "dailyproof-worker:latest"
+  34 │           imagePullPolicy: IfNotPresent
+  35 │           # worker는 HTTP를 안 열어 httpGet probe 대상이 없다. 프로세스가 떠 있으면 살아있는 것으로 보고,
+  36 │           # 정밀 liveness(폴링 동작 확인)는 추후 메트릭/파일 기반 exec probe로 보강한다.
+  37 │           resources:
+  38 │             limits:
+  39 │               cpu: 500m
+  40 └               memory: 256Mi
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0021 (LOW): Container 'worker' of Deployment 'dailyproof-dailyproof-worker' should set 'securityContext.runAsGroup' > 10000
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Force the container to run with group ID > 10000 to avoid conflicts with the host’s user table.
+
+See https://avd.aquasec.com/misconfig/ksv-0021
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/worker-deployment.yaml:32-57
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  32 ┌         - name: worker
+  33 │           image: "dailyproof-worker:latest"
+  34 │           imagePullPolicy: IfNotPresent
+  35 │           # worker는 HTTP를 안 열어 httpGet probe 대상이 없다. 프로세스가 떠 있으면 살아있는 것으로 보고,
+  36 │           # 정밀 liveness(폴링 동작 확인)는 추후 메트릭/파일 기반 exec probe로 보강한다.
+  37 │           resources:
+  38 │             limits:
+  39 │               cpu: 500m
+  40 └               memory: 256Mi
+  ..   
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+KSV-0110 (LOW): deployment dailyproof-dailyproof-worker in default namespace should set metadata.namespace to a non-default namespace
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Checks whether a workload is running in the default namespace.
+
+See https://avd.aquasec.com/misconfig/ksv-0110
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ templates/worker-deployment.yaml:4-11
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   4 ┌ metadata:
+   5 │   name: dailyproof-dailyproof-worker
+   6 │   labels:
+   7 │     app.kubernetes.io/name: dailyproof
+   8 │     app.kubernetes.io/instance: dailyproof
+   9 │     app.kubernetes.io/version: "0.1.0"
+  10 │     app.kubernetes.io/managed-by: Helm
+  11 └     app.kubernetes.io/component: worker
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
