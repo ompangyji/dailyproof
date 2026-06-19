@@ -56,7 +56,7 @@
 | `incident-` | 장애 재현·탐지 화면 |
 | `perf-` | k6/autocannon 성능 결과 |
 | `admin-` | admin ops 페이지 |
-| `backup-` | 백업·복구 드릴(pg_dump·복원·행수 검증) |
+| `backup-` | 백업·recovery drill(pg_dump·복원·행수 검증) |
 
 예시 (정렬 = 작업한 순서):
 
@@ -100,7 +100,7 @@
 - [x] `runbooks/argocd.md` — ArgoCD GitOps(pull) 설치·repo 크리덴셜·Application 동기화·UI
 - [x] `runbooks/jenkins.md` — self-hosted Jenkins 파이프라인(Jenkinsfile, GitHub Actions와 동일 검사)
 - [x] `runbooks/rollback.md` — 롤백(ArgoCD/helm/이미지태그) + 배포 후 smoke 검증·체크리스트
-- [x] `runbooks/backup-recovery.md` — 백업·복구(상태 구분·DB/스토리지 전략·RPO/RTO·복구 시나리오 + pg_dump→복원→행수 일치 드릴 실측)
+- [x] `runbooks/backup-recovery.md` — 백업·복구(상태 구분·DB/스토리지 전략·RPO/RTO·복구 시나리오 + pg_dump→복원→행수 일치 drill 실측)
 - [x] `retrospective/cicd-gitops.md` — CI/CD·GitOps 트러블슈팅 회고(증상·원인·해결·교훈)
 - [x] `retrospective/wsl-drvfs.md` — WSL/drvfs 환경 제약 회고(chmod·CRLF·EPERM 빌드·pathspec)
 - [x] `retrospective/async-pipeline.md` — 비동기 파이프라인 회고(유령 job·잘린 키·지연 폭발·trace_id null)
@@ -108,6 +108,7 @@
 - [x] `retrospective/test-layers.md` — 테스트 계층 회고(유닛·health·smoke·E2E가 각각 보는 것, E2E를 왜·어디에)
 - [x] `retrospective/metrics-load.md` — /metrics 부하 ~10초 행 회고(3-way 진단: 쿼리·REST·pod 경로 격리, 캐시·fail-fast·stale, 환경성 결론)
 - [x] `retrospective/security-scanning.md` — 보안 스캐닝 도입 전 이해 회고(도구가 규칙을 아는 출처: CVE DB / 정책 코드룰 / SAST 패턴)
+- [x] `retrospective/backup-drill.md` — 첫 recovery drill 회고(IPv6 연결 막힘→pooler, 에러 화면≠실패: >/dev/null·ON_ERROR_STOP 이해, 복원=SQL replay, 관리형 객체와 데이터 분리)
 - [x] `security/findings-triage.md` — 스캐너 findings 28건 triage(real/FP·fix/suppress 판정·근거·사유 기록)
 - [x] `incidents/incident-log.md` — 장애 등록부(실제 겪은 장애 5건 통일 포맷 요약·색인: 빈 build-arg readiness 503·ImagePullBackOff·/metrics 부하 행·CI 플레이크·PostSync hook 막힘. 상세는 회고·runbook으로 링크아웃)
 - [x] `performance/performance.md` — 성능 베이스라인(k6, 조회+DB vs 순수앱 대비·threshold·병목 가설)

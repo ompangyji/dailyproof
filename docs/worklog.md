@@ -1277,7 +1277,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **이전 상태 / 문제**
 
-- 배포가 `helm install`/dry-run 같은 **명령 단위**로만 이뤄졌다. 그래서 ①클러스터에 무엇이 떠 있는지가 명령 실행 이력에만 남아 **형상이 코드로 추적되지 않고**(드리프트·재현 어려움), ②변경·롤백·삭제가 수동 명령이라 **리뷰도 재현도 안 되며**, ③환경별 배포가 사람 손에 의존했다.
+- 배포가 `helm install`/dry-run 같은 **명령 단위**로만 이뤄졌다. 그래서 ①클러스터에 무엇이 떠 있는지가 명령 실행 이력에만 남아 **형상이 코드로 추적되지 않고**(drift·재현 어려움), ②변경·롤백·삭제가 수동 명령이라 **리뷰도 재현도 안 되며**, ③환경별 배포가 사람 손에 의존했다.
 
 **목적**
 
@@ -1337,7 +1337,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **이전 상태 / 문제**
 
-- 배포가 **push 방식**(내가 `terraform apply`로 클러스터에 밀어넣음)뿐이었다. 누가 클러스터를 직접 바꾸면(드리프트) 자동으로 되돌릴 장치가 없고, "git에 merge하면 곧 배포"라는 GitOps 흐름이 없었다.
+- 배포가 **push 방식**(내가 `terraform apply`로 클러스터에 밀어넣음)뿐이었다. 누가 클러스터를 직접 바꾸면(drift) 자동으로 되돌릴 장치가 없고, "git에 merge하면 곧 배포"라는 GitOps 흐름이 없었다.
 
 **목적**
 
@@ -1807,7 +1807,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - 계획서 4.11 완료기준(4개 드라이버 절감 전략 + 보존주기·샘플링·thumbnail 정책) 충족. 새 코드 없음(문서 전용), 기존 구현을 근거로 인용해 검증 가능하게 작성. README 인덱스 추가.
 
-### 2. 백업·복구 문서 + 복구 드릴(backup-recovery.md)
+### 2. 백업·복구 문서 + recovery drill(backup-recovery.md)
 
 **이전 상태 / 문제**
 
@@ -1815,20 +1815,21 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 **목적**
 
-- DB·스토리지 유실 대응 전략과 RPO/RTO 가정을 정의하고, **백업→복원→검증을 실제로 돌려**(드릴) 복구가 된다는 걸 증거로 남긴다. 문서만 쓰는 게 아니라 *검증된* 복구 절차를 만든다.
+- DB·스토리지 유실 대응 전략과 RPO/RTO 가정을 정의하고, **백업→복원→검증을 실제로 돌려**(drill) 복구가 된다는 걸 증거로 남긴다. 문서만 쓰는 게 아니라 *검증된* 복구 절차를 만든다.
 
 **한 일**
 
-- `docs/runbooks/backup-recovery.md` — 상태 구분 표(stateless 앱=재배포 / state=Supabase) · DB 백업 전략 · 스토리지 유실 대응(원본=치명적, 파생물=재생성, orphan/missing 드리프트 탐지) · RPO/RTO 가정 표 · 복구 시나리오 4가지 · **복구 드릴 실측** · 체크리스트.
+- `docs/runbooks/backup-recovery.md` — 상태 구분 표(stateless 앱=재배포 / state=Supabase) · DB 백업 전략 · 스토리지 유실 대응(원본=치명적, 파생물=재생성, orphan/missing drift 탐지) · RPO/RTO 가정 표 · 복구 시나리오 4가지 · **recovery drill 실측** · 체크리스트.
 - `.gitignore`에 `backup*.sql`(실데이터 덤프 — 커밋 금지) 추가.
+- `docs/retrospective/backup-drill.md` — drill 중 막힌 지점·이해를 회고로 분리(IPv6 연결→pooler, 에러 화면이 왜 정상인지, 복원=SQL replay, 관리형 객체 vs 데이터 분리).
 
 **핵심 설계**
 
 - **이 스택의 강점**: 앱은 stateless·재배포로 복구, 상태는 전부 외부 Supabase → **클러스터 전체 손실에도 상태 보존**(시크릿만 재주입).
 - **진짜 위험은 둘**: DB 데이터, 업로드 원본(코드로 재생성 불가). 파생물(thumbnail·checksum)은 worker 재처리로 복구.
-- **드리프트 탐지 양방향**: orphan(파일O·행X, admin ops) + missing(행O·파일X, 역방향 쿼리).
+- **drift 탐지 양방향**: orphan(파일O·행X, admin ops) + missing(행O·파일X, 역방향 쿼리).
 
-**검증 (복구 드릴 실측)**
+**검증 (recovery drill 실측)**
 
 - ① `pg_dump`로 전체 논리 백업(229K, 데이터 포함). ② docker로 빈 postgres에 복원(관리형 전용 객체 오류는 무시). ③ 복원본 `proof_assets=7·jobs=7` = Supabase 원본 `7·7` **일치** → 백업이 데이터 손실 없이 복원됨 확인.
 - 발견: vanilla postgres 복원 시 **Supabase 관리형 전용 객체(vault 확장·authenticated/anon 역할·그 역할 RLS grant)는 복원 안 됨** → 환경 이전 시 별도 재생성 필요. 순수 앱 데이터(public)는 그대로 복원.
@@ -1838,3 +1839,4 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `142-backup-pgdump-created-20260620.png` — `pg_dump` 백업 산출물(229K, INSERT/COPY 57).
 - `143-backup-restore-rowcount-20260620.png` — 빈 DB 복원본 행 수(proof_assets·jobs 7/7).
 - `144-backup-source-rowcount-20260620.png` — Supabase 원본 행 수(7/7) — 복원본과 일치.
+- `145-backup-restore-managed-skipped-20260620.png` — 복원 중 관리형 전용 객체(vault·역할) 스킵 에러 화면(앱 데이터는 정상 복원).
