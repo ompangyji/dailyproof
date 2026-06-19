@@ -35,6 +35,9 @@ yarn-error.log*
 supabase/프로젝트 비밀번호.txt
 *.secret.txt
 
+# DB 백업 덤프 (실데이터 — 커밋 금지, 복구 드릴 산출물)
+backup*.sql
+
 # favicon source artifacts (generated icons live in src/app/)
 /favicon.png
 /favicon.zip

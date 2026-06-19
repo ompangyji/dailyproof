@@ -106,7 +106,7 @@ kubectl get pods -n dailyproof-staging                   # web·worker Running
 |---|---|---|
 | 방식 | push(`terraform apply`로 내가 밀어넣음) | pull(클러스터가 git을 끌어와 맞춤) |
 | source of truth | tfstate | git |
-| 드리프트 | 다음 apply에서 교정 | selfHeal로 자동 교정 |
+| drift | 다음 apply에서 교정 | selfHeal로 자동 교정 |
 | 네임스페이스 | `dailyproof` | `dailyproof-staging` |
 
 ## 7. 후속
