@@ -1725,4 +1725,9 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **문서 → 구현 (HPA/KEDA)**
 
 - 분석에서 그친 게 아니라 매니페스트로 실제 추가: `templates/web-hpa.yaml`(HPA v2, CPU — metrics-server 필요, k3s 번들이라 즉시 동작) + `templates/worker-scaledobject.yaml`(KEDA ScaledObject, `pending` 큐 깊이 — KEDA 설치 전제). `values.autoscaling`으로 토글, 켜지면 Deployment의 정적 `replicas`는 조건부 생략(오토스케일러가 관리).
-- 검증: helm lint·template — off에선 HPA 리소스 0·replicas 2, on(`--set …enabled=true`)에선 HPA·ScaledObject·TriggerAuthentication 각 1·replicas 0. 유효 YAML.
+- 검증(빌드): helm lint·template — off에선 HPA 리소스 0·replicas 2, on(`--set …enabled=true`)에선 HPA·ScaledObject·TriggerAuthentication 각 1·replicas 0. 유효 YAML.
+- 검증(런타임): web HPA를 k3s에 적용 → `kubectl get hpa`에서 `TARGETS cpu: 4%/70%`·MIN 1/MAX 5/REPLICAS 1로 **실제 동작 확인**(metrics-server가 web CPU 실측, 부하 없어 1개 유지). worker KEDA는 KEDA 미설치라 매니페스트로만 둠.
+
+**자료**
+
+- `134-deploy-web-hpa-active-20260619.png` — web HPA 적용 후 `get hpa`가 `cpu: 4%/70%`로 web CPU를 실측·감시(오토스케일 동작).
