@@ -1657,3 +1657,18 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - 4건 전부 **억제 없이 수정**(postcss override·HEALTHCHECK·notion-sync). CI 재스캔으로 감소 확인 예정.
 - **교훈(스캔 범위)**: 로컬 검증과 CI 스캔의 **범위가 다르면 사각지대가 생긴다**(로컬 차트만 vs CI repo 전체) → 로컬도 repo 루트(`trivy fs .`)로 스캔.
 - 막힌 지점: `harden/xss-and-ignore` merge 후 로컬 pull 누락으로 stale main 위에서 작업 → `git fetch` + rebase로 정렬(앞으로 merge 직후 pull 챙김).
+
+### 4. 보안 게이트 soft → hard 전환
+
+**이전 상태 / 목적**
+
+- 보안 스캐닝을 처음엔 **soft(경보만)** 로 도입해 findings를 triage·수정했다. 이제 findings(misconfig 0·시크릿 0)가 정리됐으니, **"보안 미달이면 merge 차단"** 이 실제로 작동하도록 hard로 올린다.
+
+**한 일**
+
+- `security.yml`: gitleaks `continue-on-error` 제거(시크릿 발견 시 job 실패), trivy 게이트 표 스텝 `exit-code "0" → "1"`(HIGH/CRITICAL 발견 시 job 실패). SARIF 업로드 스텝은 `exit-code "0"` 유지(Security 탭 보고는 항상).
+- 이로써 보안 스캐닝이 **soft 보고 → hard merge 게이트**가 됨. (배포 후 PostSync smoke 게이트와 같은 결의 "비정상 차단" — 이번엔 merge 전 단계)
+
+**검증**
+
+- 현재 HIGH/CRITICAL 0·시크릿 0이라 hard로 올려도 **통과**(CI green). 향후 HIGH/CRITICAL이 들어오면 그 PR이 자동 차단된다.
