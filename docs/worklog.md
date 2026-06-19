@@ -1638,3 +1638,22 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **한 일 / 교훈**
 
 - 원리를 문서화(`retrospective/cicd-gitops.md` §6 교훈 + `runbooks/argocd.md`): 선언형(declarative) 시스템에선 **"됐다"를 명령 성공 여부가 아니라 관찰된 상태로 판단**한다. `sync` 명령이 실패해도 **auto-sync가 desired로 수렴**시켜 결과는 맞을 수 있다 → source of truth는 `argocd app get`의 **`Synced`(원하는 revision) + `Healthy`**. (k8s 전반: 명령 exit가 아니라 desired == observed)
+
+### 3. Code scanning findings 정리 (repo 전체 스캔분)
+
+**이전 상태 / 문제**
+
+- 하드닝 후에도 Security 탭에 **findings 4건**이 남아 있었다. 로컬 trivy는 `deploy/helm`(차트)만 스캔했는데 **CI는 repo 전체**(Dockerfile·의존성·스크립트)를 봐서, 차트 밖 findings를 로컬에서 놓친 것.
+
+**한 일**
+
+- `postcss` XSS(Medium, 전이 의존성 8.4.31): `package.json` `overrides`로 `postcss ^8.4.49` 강제 → 8.5.15로 통합.
+- `No HEALTHCHECK`(Low) ×2: **억제 대신 실제 추가** — web은 `/health/live` wget, worker는 `pgrep -f worker.mjs`(HTTP 없음). docker/compose용(k8s는 probe).
+- `Superfluous trailing arguments`(CodeQL): `notion-sync.mjs`의 `mapPool`이 `fn(item, i)`로 호출하나 유일 호출부가 index 미사용 → 인자 제거.
+- triage 기록은 `docs/security/findings-triage.md`(추가 round).
+
+**검증 / 교훈**
+
+- 4건 전부 **억제 없이 수정**(postcss override·HEALTHCHECK·notion-sync). CI 재스캔으로 감소 확인 예정.
+- **교훈(스캔 범위)**: 로컬 검증과 CI 스캔의 **범위가 다르면 사각지대가 생긴다**(로컬 차트만 vs CI repo 전체) → 로컬도 repo 루트(`trivy fs .`)로 스캔.
+- 막힌 지점: `harden/xss-and-ignore` merge 후 로컬 pull 누락으로 stale main 위에서 작업 → `git fetch` + rebase로 정렬(앞으로 merge 직후 pull 챙김).
