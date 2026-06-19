@@ -6,7 +6,9 @@ metadata:
     {{- include "dailyproof.labels" . | nindent 4 }}
     app.kubernetes.io/component: worker
 spec:
-  replicas: {{ .Values.worker.replicas }}
+  {{- if not .Values.autoscaling.worker.enabled }}
+  replicas: {{ .Values.worker.replicas }} # autoscaling 켜지면 KEDA ScaledObject가 관리(여기선 생략)
+  {{- end }}
   selector:
     matchLabels:
       {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "worker") | nindent 6 }}

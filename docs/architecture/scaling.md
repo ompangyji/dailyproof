@@ -31,7 +31,17 @@
 - **web tail 지연** — `health_live`가 296 rps에서 p95 274ms(cpu 1·단일 pod). 처리량 자체보다 tail이 먼저 나빠짐 → web replicas/HPA의 근거.
 - **worker scale-out 비용 낮음** — `claim_job` `FOR UPDATE SKIP LOCKED`로 다중화 정합성이 이미 보장돼, 확장은 "replicas + 큐깊이 HPA"만으로 된다.
 
+## 구현 (HPA / KEDA)
+
+위 1·2단계는 차트에 매니페스트로 들어가 있다(기본 off — 켜면 정적 `replicas`는 생략되고 오토스케일러가 관리).
+
+- **web** — `templates/web-hpa.yaml`(`HorizontalPodAutoscaler` v2, CPU). `values: autoscaling.web.enabled=true`로 켠다. **metrics-server 필요**(k3s 기본 번들이라 즉시 동작) → `kubectl get hpa`로 확인.
+- **worker** — `templates/worker-scaledobject.yaml`(KEDA `ScaledObject` + `TriggerAuthentication`). `pending` 수가 `pendingThreshold`를 넘으면 scale out. **KEDA 설치 + jobs 테이블 조회용 Postgres 연결 시크릿**(`autoscaling.worker.kedaConnectionSecret`, gitignored) 전제. claim_job이 `SKIP LOCKED`라 다중 worker는 그대로 안전.
+
+```bash
+helm upgrade ... --set autoscaling.web.enabled=true --set autoscaling.worker.enabled=true
+```
+
 ## 후속
 
-- HPA 매니페스트(web=CPU, worker=`pending` 큐 깊이) 추가. 큐 깊이 메트릭은 이미 `/metrics`에 있어 외부 메트릭 어댑터(KEDA 등)로 바로 연결 가능.
-- 실제 부하가 발생하는 환경(클라우드 클러스터)에서 단계별 한계점 재측정.
+- 실제 부하가 발생하는 환경(클라우드 클러스터)에서 단계별 한계점 재측정. 로컬 k3s는 web HPA(CPU)까지 즉시 검증 가능, worker KEDA는 KEDA 설치 후.

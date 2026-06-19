@@ -1721,3 +1721,8 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **검증**
 
 - 계획서 4.13 완료기준(병목 식별·분리 순서·web/worker/storage/queue 어디 먼저) 충족. 회고와 중복 없는 net-new 종합.
+
+**문서 → 구현 (HPA/KEDA)**
+
+- 분석에서 그친 게 아니라 매니페스트로 실제 추가: `templates/web-hpa.yaml`(HPA v2, CPU — metrics-server 필요, k3s 번들이라 즉시 동작) + `templates/worker-scaledobject.yaml`(KEDA ScaledObject, `pending` 큐 깊이 — KEDA 설치 전제). `values.autoscaling`으로 토글, 켜지면 Deployment의 정적 `replicas`는 조건부 생략(오토스케일러가 관리).
+- 검증: helm lint·template — off에선 HPA 리소스 0·replicas 2, on(`--set …enabled=true`)에선 HPA·ScaledObject·TriggerAuthentication 각 1·replicas 0. 유효 YAML.
