@@ -1840,3 +1840,36 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `143-backup-restore-rowcount-20260620.png` — 빈 DB 복원본 행 수(proof_assets·jobs 7/7).
 - `144-backup-source-rowcount-20260620.png` — Supabase 원본 행 수(7/7) — 복원본과 일치.
 - `145-backup-restore-managed-skipped-20260620.png` — 복원 중 관리형 전용 객체(vault·역할) 스킵 에러 화면(앱 데이터는 정상 복원).
+
+### 3. 보안 기본기 — 업로드 API guard (+ zod 입력 검증)
+
+**이전 상태 / 문제**
+
+- 엔드포인트 권한 경계 감사(전반은 양호: 미들웨어 강제·RLS owner-only·media 인증 프록시·admin RPC 재검증) 중 **실제 구멍** 발견: `/api/proof-assets`가 클라이언트가 보낸 `source_path`를 무검증으로 등록. → 공격자가 **타인 경로**를 자기 asset으로 등록하면 **worker(service_role)가 RLS를 우회해 그 파일을 다운로드·처리** = 교차 사용자 데이터 노출 위험(계획서 4.10 보안 기본기).
+
+**목적**
+
+- 클라이언트 검증(upload.ts)은 우회 가능하므로, 서버에서 재검증하는 API guard를 둔다. 특히 `source_path` 소유 확인.
+
+**한 일**
+
+- `/api/proof-assets`에 서버 검증 추가: **`source_path`가 본인 uid 폴더(`${user.id}/<kind>/<file>`)인지(403)** + path traversal 차단, `content_type=image/*`·`size_bytes≤8MB`·`kind∈{doits,pages}`는 **zod 스키마(400)**.
+- zod 도입(`^4.4.3`). 순수 JS라 drvfs에서도 로컬 설치됨 → 로컬 dev·tsc 정상.
+
+**핵심 설계**
+
+- **403 vs 400 분리**: 소유 위반은 `user.id`가 필요해 인증 뒤 런타임 체크(authorization=403), shape(타입·범위)는 zod로 선검증(400).
+- **이중 방어**: 버킷 자체가 이미 `public=false·file_size_limit=8MB·allowed_mime_types=image/*`로 server-side 강제 → API guard는 그 위의 등록 단계 게이트.
+
+**검증**
+
+- 브라우저 콘솔(로그인 세션)에서 ① 타유저 경로 등록 → **403** ② 본인 경로 + 비이미지(`text/html`) → **400**. 정상 업로드는 통과(회귀 없음). tsc 클린(zod 라우트 에러 0).
+
+**자료**
+
+- `146-sec-proofassets-guard-403-foreign-20260620.png` — 타유저 경로 등록 시 403(교차 사용자 차단).
+- `147-sec-proofassets-guard-400-contenttype-20260620.png` — 비이미지 content_type 시 400.
+- `148-sec-proofassets-zod-400-details-20260620.png` — zod 검증(응답 본문 `details`로 위반 필드를 한 번에 보고: content_type+size_bytes 동시).
+- `149-sec-proofassets-zod-403-foreign-20260620.png` — zod 버전에서도 타유저 경로 등록 403.
+
+개념·배움은 회고로 분리: [retrospective/input-validation.md](retrospective/input-validation.md) — 신뢰 경계(클라 검증은 UX·서버가 게이트), 타입≠검증, source_path 무검증이 worker service_role과 연결돼 IDOR가 되는 경로, manual vs zod, 403/400 분리.
