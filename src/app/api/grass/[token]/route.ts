@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 type Day = { d: string; c: number };
 type Grass = { name: string; days: Day[] };
@@ -201,6 +202,16 @@ export async function GET(
   const { token } = await params;
   const { searchParams } = new URL(req.url);
   const wantsJson = searchParams.get("format") === "json";
+
+  // rate limit (IP 기준): 비로그인 공개 엔드포인트라 토큰 brute-force·scraping에 노출.
+  // token 검증 전에 둬 무효 토큰 무차별 대입도 제한한다. (근거: docs/security/rate-limit.md)
+  const rl = rateLimit(`grass:${clientIp(req)}`, 60, 60_000);
+  if (!rl.allowed) {
+    const headers = { "Access-Control-Allow-Origin": "*", "Retry-After": String(rl.retryAfter) };
+    return wantsJson
+      ? Response.json({ error: "rate_limited" }, { status: 429, headers })
+      : svgResponse(placeholder("Rate limited"), 429);
+  }
 
   if (!/^[a-f0-9]{8,64}$/.test(token)) {
     return wantsJson

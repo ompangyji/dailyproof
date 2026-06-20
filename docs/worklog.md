@@ -1873,3 +1873,34 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `149-sec-proofassets-zod-403-foreign-20260620.png` — zod 버전에서도 타유저 경로 등록 403.
 
 개념·배움은 회고로 분리: [retrospective/input-validation.md](retrospective/input-validation.md) — 신뢰 경계(클라 검증은 UX·서버가 게이트), 타입≠검증, source_path 무검증이 worker service_role과 연결돼 IDOR가 되는 경로, manual vs zod, 403/400 분리.
+
+### 4. 보안 기본기 — rate limiting (대상 선정 분석 + 구현)
+
+**이전 상태 / 문제**
+
+- rate limit(과도한 요청 차단)이 전무. 특히 **비로그인 공개**인 `/api/grass`는 외부 공격(토큰 brute-force·scraping·DoS)에 그대로 노출. "어디에 거는가"를 근거 없이 정할 순 없었다(계획서 4.10).
+
+**목적**
+
+- 결론만 코드에 넣지 않고, **어느 엔드포인트에 왜 거는지(위험·비용 평가)를 먼저 문서화**한 뒤 그 결론대로 구현한다.
+
+**한 일**
+
+- `docs/security/rate-limit.md` — 평가 기준(노출도·악용 시나리오·영향·기존 방어) 정의 → 엔드포인트별 평가 표 → 결론. **트래픽 0이라 위험·비용은 측정 아닌 추론**임을 명시(정직한 프레이밍).
+- `src/lib/rate-limit.ts` — 재사용 in-memory 고정 윈도우 limiter(`rateLimit(key, limit, windowMs)` + `clientIp`). 만료 버킷 정리(메모리 누수 방지).
+- 적용: **`/api/grass` IP 기준 60/분**(token 검증 전에 둬 무효 토큰 brute-force도 제한), **`/api/proof-assets` uid 기준 30/분**. 초과 시 `429`+`Retry-After`.
+
+**핵심 설계 (왜 여기·왜 이렇게)**
+
+- **대상**: grass=유일한 비로그인 공개라 1순위(IP 키), proof-assets=인증이나 DB쓰기+job이라 2순위(uid 키). media=인증+RLS+캐시라 보류(진짜는 CDN), login=Supabase 자체 rate limit이라 위임(중복 금지).
+- **키 구분**: 공개는 **IP**, 인증은 **uid** — 공격 단위에 맞춘 키.
+- **한계 명시**: in-memory라 다중 pod=per-pod·재시작 초기화 → 진짜 운영은 edge(Traefik)/Redis. 데모는 '통제의 존재·동작' 실증.
+
+**검증**
+
+- 로그인 콘솔에서 `/api/proof-assets`를 35회 연속 호출 → 0~29 통과, **30번째부터 `429`**(uid당 30/분 정확히 작동). grass도 동일 함수(IP 키)라 같은 메커니즘. tsc 클린·build 컴파일 성공.
+
+**자료**
+
+- `150-sec-ratelimit-proofassets-start-20260620.png` — 반복 호출 시작(한도 이하, 통과).
+- `151-sec-ratelimit-proofassets-429-20260620.png` — 30번째부터 `429 Too Many Requests`(uid 한도 작동).
