@@ -1869,3 +1869,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `146-sec-proofassets-guard-403-foreign-20260620.png` — 타유저 경로 등록 시 403(교차 사용자 차단).
 - `147-sec-proofassets-guard-400-contenttype-20260620.png` — 비이미지 content_type 시 400.
+- `148-sec-proofassets-zod-400-details-20260620.png` — zod 검증(응답 본문 `details`로 위반 필드를 한 번에 보고: content_type+size_bytes 동시).
+- `149-sec-proofassets-zod-403-foreign-20260620.png` — zod 버전에서도 타유저 경로 등록 403.
+
+개념·배움은 회고로 분리: [retrospective/input-validation.md](retrospective/input-validation.md) — 신뢰 경계(클라 검증은 UX·서버가 게이트), 타입≠검증, source_path 무검증이 worker service_role과 연결돼 IDOR가 되는 경로, manual vs zod, 403/400 분리.
