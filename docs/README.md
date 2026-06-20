@@ -111,5 +111,6 @@
 - [x] `retrospective/backup-drill.md` — 첫 recovery drill 회고(IPv6 연결 막힘→pooler, 에러 화면≠실패: >/dev/null·ON_ERROR_STOP 이해, 복원=SQL replay, 관리형 객체와 데이터 분리)
 - [x] `retrospective/input-validation.md` — API 입력 검증·신뢰 경계 회고(클라 검증은 UX·서버가 게이트, 타입≠검증, source_path 무검증→worker service_role 우회 IDOR, manual vs zod, 403/400 분리)
 - [x] `security/findings-triage.md` — 스캐너 findings 28건 triage(real/FP·fix/suppress 판정·근거·사유 기록)
+- [x] `security/rate-limit.md` — rate limit 대상 선정 분석(노출도·악용·비용·기존방어 기준 → 엔드포인트 평가 → grass IP·proof-assets uid 결정, in-memory 한계·edge/Redis 후속)
 - [x] `incidents/incident-log.md` — 장애 등록부(실제 겪은 장애 5건 통일 포맷 요약·색인: 빈 build-arg readiness 503·ImagePullBackOff·/metrics 부하 행·CI 플레이크·PostSync hook 막힘. 상세는 회고·runbook으로 링크아웃)
 - [x] `performance/performance.md` — 성능 베이스라인(k6, 조회+DB vs 순수앱 대비·threshold·병목 가설)

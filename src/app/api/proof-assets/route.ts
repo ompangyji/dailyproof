@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { rateLimit } from "@/lib/rate-limit";
 import { trace } from "@opentelemetry/api";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
@@ -58,6 +59,16 @@ export async function POST(req: Request) {
   const { data: { user }, error: userErr } = await supabase.auth.getUser();
   if (userErr || !user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // rate limit (uid 기준): 인증 사용자의 스팸 등록(→ jobs 큐·DB 적체)을 제한.
+  // (근거·한도: docs/security/rate-limit.md)
+  const rl = rateLimit(`proof-assets:${user.id}`, 30, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } },
+    );
   }
 
   // 소유 검증(403): source_path는 반드시 '본인 uid 폴더'여야 한다. 아니면 타인 파일을 자기
