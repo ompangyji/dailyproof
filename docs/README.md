@@ -113,5 +113,6 @@
 - [x] `security/findings-triage.md` — 스캐너 findings 28건 triage(real/FP·fix/suppress 판정·근거·사유 기록)
 - [x] `security/rate-limit.md` — rate limit 대상 선정 분석(노출도·악용·비용·기존방어 기준 → 엔드포인트 평가 → grass IP·proof-assets uid 결정, in-memory 한계·edge/Redis 후속)
 - [x] `security/public-url-exposure.md` — 공개 URL 오남용 점검(접근게이트·추측·노출범위·검증일치·소비통제 기준 → media/grass 평가·판정 → grass 토큰 검증 24 hex 하드닝)
+- [x] `security/checklist.md` — 보안 기본기(4.10) 체크리스트(MIME·크기·경로·권한경계·입력검증·rate limit·공개URL·스캐닝·런타임하드닝을 어느 층에서 막나 + 잔여 위험)
 - [x] `incidents/incident-log.md` — 장애 등록부(실제 겪은 장애 5건 통일 포맷 요약·색인: 빈 build-arg readiness 503·ImagePullBackOff·/metrics 부하 행·CI 플레이크·PostSync hook 막힘. 상세는 회고·runbook으로 링크아웃)
 - [x] `performance/performance.md` — 성능 베이스라인(k6, 조회+DB vs 순수앱 대비·threshold·병목 가설)

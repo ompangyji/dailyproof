@@ -1932,3 +1932,27 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **후속**
 
 - 토큰 회전(rotate) 기능 부재 — 현재는 `enabled=false`/재생성으로 무효화. 명시적 rotate는 후속 과제로 문서에 기록.
+
+### 6. 보안 기본기 — 버킷 강제 확인
+
+**이전 상태 / 문제**
+
+- 스키마에 버킷 제약(`public=false·8MB·image/*`)이 선언돼 있었지만 **실제 Supabase에 적용됐는지 눈으로 확인**한 적 없었고, 통제들이 흩어져 있어 한눈에 보는 점검표가 없었다.
+
+**한 일**
+
+- **버킷 설정 확인**(대시보드 Storage › media › Edit): Public **OFF** · Restrict file size **8MB** · Restrict MIME **image/\*** — 스키마 선언대로 **server-side 강제** 적용됨을 실물 확인.
+- `docs/security/checklist.md` — 4.10 전체(MIME·크기·경로·권한 경계·입력 검증·rate limit·공개 URL·스캐닝·런타임 하드닝)를 **어느 층(클라/API/DB/Storage)에서 막나** + 근거·자료로 묶은 점검표.
+
+**핵심 설계**
+
+- **방어 계층**: 같은 제약(이미지·8MB)을 클라(UX)→API(zod)→DB constraint→Storage 4층에 반복. 진짜 우회 불가 게이트는 Storage 버킷(`152`).
+- 체크리스트에 **잔여 위험/후속**(service_role rotation·토큰 rotate·분산 rate limit·egress CDN·추가 하드닝 task)을 명시해 "끝난 것/남은 것"을 구분.
+
+**검증**
+
+- 버킷 설정 스샷(`152`)으로 server-side 강제 확인. 새 코드 없음(확인+문서). README 인덱스 추가.
+
+**자료**
+
+- `152-sec-bucket-config-mime-size-20260621.png` — media 버킷이 비공개·8MB·image/\*를 server-side 강제(클라/API와 별개의 우회 불가 게이트).
