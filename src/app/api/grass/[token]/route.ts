@@ -213,7 +213,9 @@ export async function GET(
       : svgResponse(placeholder("Rate limited"), 429);
   }
 
-  if (!/^[a-f0-9]{8,64}$/.test(token)) {
+  // 토큰은 항상 gen_random_bytes(12) = 96비트 = 24 hex로 생성된다(schema trackers.token).
+  // 검증도 정확히 24 hex로 좁힌다 — 생성물보다 느슨한 형태(짧은 토큰)를 받지 않도록.
+  if (!/^[a-f0-9]{24}$/.test(token)) {
     return wantsJson
       ? Response.json({ error: "not_found" }, { status: 404, headers: { "Access-Control-Allow-Origin": "*" } })
       : svgResponse(placeholder("Graph unavailable"), 404);
