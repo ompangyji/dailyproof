@@ -2029,3 +2029,26 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - 배포본에서 `Unregistered API key` 401(로그인 실패)을 진단하다, "web=Vercel / worker=별도 상주 환경" 분리와 그 운영 함의가 문서에 없던 걸 발견 → 보강.
 - `README.md` Vercel 배포 섹션: Vercel은 web만 호스팅(worker는 서버리스 불가) · 환경변수는 `NEXT_PUBLIC_*` 2개만(service_role·`WORKER_*`는 넣지 말 것 — worker 전용·god-mode) · `NEXT_PUBLIC_*`는 빌드 타임 인라인이라 변경 시 재배포 필요 · 후처리는 worker 미기동 시 미동작.
 - `architecture/environments.md`에 "3.1 컴포넌트별 배포 타깃(web≠worker)" 표·근거 추가.
+
+### 9. 보안 강화 — NetworkPolicy (네트워크 최소권한)
+
+**이전 상태 / 문제**
+
+- pod 간·외부 트래픽에 제한이 전혀 없었다(차트에 NetworkPolicy 0). 한 pod가 뚫리면 클러스터 안에서 자유롭게 번질(lateral movement) 수 있는 상태.
+
+**한 일**
+
+- `templates/networkpolicy.yaml`(신규) — default-deny + 필요한 흐름만 allow, `values.networkPolicy.enabled`(기본 on).
+  - **default-deny**(전 pod ingress·egress 차단) · **allow-dns**(전 pod→kube-dns:53) · **web-ingress**(컨트롤러 ns→web:3000) · **app-egress**(web·worker→외부:443·같은 ns:4318).
+- `architecture/network.md`에 정책표·근거·한계 섹션 추가.
+
+**핵심 설계**
+
+- **k3s가 NetworkPolicy를 실제 강제**(kube-router netpol 내장)라 데모 가능.
+- **DNS를 별도 정책으로 먼저 허용** — 없으면 이름 해석 실패로 전부 깨짐(흔한 함정). NetworkPolicy는 가산적이라 정책들의 allow가 합쳐진다.
+- **worker는 ingress 정책 없음** — 폴링만 하므로 수신 불필요, default-deny로 차단 유지.
+- **한계 명시**: NetworkPolicy는 IP·포트·라벨 기준이라 도메인을 못 좁힘 → 외부 egress는 "443으로 클러스터 밖(사설 대역 except)"까지가 한계. FQDN 정책은 Cilium 등 별도 CNI 필요([추후]).
+
+**검증**
+
+- `helm template`로 on(정책 4개: default-deny·allow-dns·web-ingress·app-egress)·off(0개) 렌더 확인. 런타임(차단 timeout/허용 성공) 검증은 k3s 적용 시.

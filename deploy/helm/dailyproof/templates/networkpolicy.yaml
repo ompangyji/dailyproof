@@ -1,0 +1,111 @@
+{{- if .Values.networkPolicy.enabled }}
+# 네트워크 최소권한(default-deny + 필요한 흐름만 allow). k3s는 NetworkPolicy를 강제한다
+# (kube-router netpol 컨트롤러 내장). 설계·근거·한계: docs/architecture/network.md
+#
+# 한계: NetworkPolicy는 IP/포트/라벨 기준이라 도메인(supabase.co)을 직접 좁힐 수 없다.
+# 외부 egress는 'HTTPS(443)로 클러스터 밖' 까지가 한계(FQDN 정책은 Cilium 등 별도 CNI 필요).
+---
+# 1) default-deny: 이 릴리스의 모든 pod에 ingress·egress 기본 차단(기준선).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-default-deny
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# 2) DNS egress: 모든 pod → kube-dns(:53). 없으면 supabase·서비스 이름 해석 실패로 전부 깨짐(필수).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-allow-dns
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+# 3) web ingress: ingress 컨트롤러(Traefik 등)에서만 web :{{ .Values.web.containerPort }} 로.
+#    컨트롤러 식별이 어려운 환경을 위해 ingressFrom를 비우면(기본) 같은 정책을 모든 출처에 열지 않고
+#    namespaceSelector로 한정한다. values.networkPolicy.ingressControllerNamespace 로 좁힐 수 있다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-web-ingress
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "web") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            {{- with .Values.networkPolicy.ingressControllerNamespace }}
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+            {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.web.containerPort }}
+---
+# 4) web·worker egress: 외부 HTTPS(443, Supabase) + 트레이스(OTLP {{ .Values.networkPolicy.otlpPort }},
+#    같은 namespace의 jaeger가 있을 때). DNS는 위 2)에서 이미 허용.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-app-egress
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: ["{{ .Chart.Name }}"]
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: ["{{ .Release.Name }}"]
+      - key: app.kubernetes.io/component
+        operator: In
+        values: ["web", "worker"]
+  policyTypes:
+    - Egress
+  egress:
+    # 외부 HTTPS(Supabase). NetworkPolicy는 도메인을 못 좁혀 443 to 외부까지가 한계.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+    # 트레이스(OTLP) — 같은 namespace 내부로만(jaeger 배포 시). 없으면 export가 조용히 실패(무해).
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.otlpPort }}
+{{- end }}

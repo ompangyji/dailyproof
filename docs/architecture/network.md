@@ -75,7 +75,25 @@ echo "<노드IP> dailyproof.local" | sudo tee -a /etc/hosts
 
 ---
 
-## 5. 후속
+## 5. NetworkPolicy (네트워크 최소권한)
+
+pod 간·외부 트래픽을 **default-deny(전부 차단) 후 필요한 흐름만 허용**한다. 한 pod가 뚫려도 옆으로 번지는 lateral movement를 막는 네트워크 최소권한. k3s는 NetworkPolicy를 강제한다(kube-router netpol 컨트롤러 내장)라 정책이 실제로 동작한다. 차트 `templates/networkpolicy.yaml`, `values.networkPolicy.enabled`(기본 on).
+
+| 정책 | 대상 | 방향 | 허용 | 이유 |
+|---|---|---|---|---|
+| default-deny | 전 pod | ingress·egress | (없음) | 기준선 — 명시 안 한 건 전부 차단 |
+| allow-dns | 전 pod | egress | kube-dns :53 | 이름 해석. **없으면 Supabase·서비스 DNS 실패로 전부 깨짐** |
+| web-ingress | web | ingress | ingress 컨트롤러 ns → :3000 | 외부 사용자 요청(Traefik 경유)만 수신 |
+| app-egress | web·worker | egress | 외부 :443, 같은 ns :4318 | Supabase(HTTPS) + 트레이스(OTLP, jaeger 배포 시) |
+
+- **worker는 ingress 정책 없음** — 아무도 worker로 들어올 필요가 없다(폴링만 하는 프로세스). default-deny가 그대로 적용돼 수신 차단.
+- **egress 순서 의존성**: DNS(allow-dns)가 별도 정책으로 먼저 열려 있어야 443/4318 연결의 이름 해석이 된다. NetworkPolicy는 가산적(additive)이라 여러 정책의 허용이 합쳐진다.
+
+**한계 (반드시 인지)**: NetworkPolicy는 **IP·포트·라벨** 기준이라 **도메인(`*.supabase.co`)을 직접 좁힐 수 없다.** 그래서 외부 egress는 "**HTTPS(443)로 클러스터 밖(사설 대역 제외)**"까지가 한계다. 특정 도메인만 허용하는 **FQDN 기반 정책은 Cilium 등 별도 CNI**가 필요(k3s 기본 미지원) → [추후] 과제. 사설 대역(10/172.16/192.168)을 `except`로 빼 내부로의 임의 egress는 막았다.
+
+**검증**: `helm template`로 on(정책 4개)·off(0개) 렌더 확인. 런타임 검증은 적용 후 `kubectl exec`로 *차단된 연결은 timeout / 허용된 건 성공*을 확인(예: worker에서 web으로 직접 연결 시도 → 차단).
+
+## 6. 후속
 
 - **TLS**: cert-manager + Let's Encrypt로 https 자동화([추후]).
 - **정책 강제**: Traefik Middleware(body size/timeout)를 차트에 옵션으로 포함([추후], 지금은 annotation 패스스루 + 문서).
