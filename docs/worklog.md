@@ -2160,3 +2160,34 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **검증**
 
 - 새 코드 없음(문서). 잔여 위험에 service_role 회전(#55)·분산 rate limit·FQDN 정책 등 명시.
+
+### 15. 보안 강화 — 보안 이벤트 계측 (로그 + /metrics 카운터)
+
+**이전 상태 / 문제**
+
+- 거부 응답(401/403/429)이 흩어져 발생만 하고 **집계·관측이 안 됐다**. "공격 시도가 늘고 있나"를 볼 신호가 없었다(Prometheus가 긁을 보안 메트릭도 없음).
+
+**한 일**
+
+- `src/lib/security-events.ts` — `recordSecurityEvent(type, detail)`: in-process counter 증가 + `security_event` 구조화 로그를 동시에. 타입 `rate_limited`/`forbidden`/`unauthorized`.
+- 거부 지점 계측: grass(429), proof-assets(401·403·429)에서 호출.
+- `/metrics`에 `dailyproof_security_events_total{type}` **counter** 노출(DB 스냅샷 캐시와 분리해 always-fresh로 덧붙임).
+- `architecture/metrics.md`에 보안 이벤트 사전·계측 지점·**PromQL 알림 룰**·한계 섹션.
+
+**핵심 설계**
+
+- **counter라 `rate()` 정확**: 기존 게이지(스냅샷)와 달리 단조 증가하는 진짜 counter → 비율/증가량 알림에 적합.
+- **다중 pod·edge 한계 명시**: in-process라 pod별 분리·재시작 0 → Prometheus가 `sum`으로 합산(표준). 미들웨어(edge)는 모듈 공유 불가라 로그로만.
+- 메트릭(빠른 집계·알림) + 로그(개별 추적) 2층.
+
+**검증 (실측)**
+
+- tsc·build 통과. dev에서 `/metrics`에 카운터 노출(초기 0) → grass 65회 호출(60 통과+5 차단) → `dailyproof_security_events_total{type="rate_limited"} 5` **정확히 증가** 확인.
+
+**자료**
+
+- `160-sec-metrics-counter-before-0-20260622.png` — `/metrics`의 `security_events_total` 3종 0(유발 전).
+- `161-sec-metrics-counter-trigger-20260622.png` — 콘솔에서 grass 65회 호출(rate limit 유발).
+- `162-sec-metrics-counter-after-5-20260622.png` — `security_events_total{type="rate_limited"} 5`로 증가(계측 동작).
+
+65-b(Prometheus 배포)에서 scrape·알림 firing으로 강화 예정.

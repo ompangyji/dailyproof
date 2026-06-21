@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
+import { recordSecurityEvent } from "@/lib/security-events";
 import { trace } from "@opentelemetry/api";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
@@ -58,6 +59,7 @@ export async function POST(req: Request) {
   const supabase = await createClient();
   const { data: { user }, error: userErr } = await supabase.auth.getUser();
   if (userErr || !user) {
+    recordSecurityEvent("unauthorized", { route: "/api/proof-assets" });
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -65,6 +67,7 @@ export async function POST(req: Request) {
   // (근거·한도: docs/security/rate-limit.md)
   const rl = rateLimit(`proof-assets:${user.id}`, 30, 60_000);
   if (!rl.allowed) {
+    recordSecurityEvent("rate_limited", { route: "/api/proof-assets", user_id: user.id });
     return NextResponse.json(
       { error: "rate_limited" },
       { status: 429, headers: { "Retry-After": String(rl.retryAfter) } },
@@ -81,7 +84,7 @@ export async function POST(req: Request) {
     /^[A-Za-z0-9._-]+$/.test(parts[2]) &&    // 파일명 안전 문자만
     !source_path.includes("..");             // path traversal 차단
   if (!owned) {
-    log.warn("source_path 소유 검증 실패", { source_path, user_id: user.id });
+    recordSecurityEvent("forbidden", { route: "/api/proof-assets", reason: "source_path", source_path, user_id: user.id });
     return NextResponse.json({ error: "invalid source_path" }, { status: 403 });
   }
   if (kind !== undefined && kind !== parts[1]) {

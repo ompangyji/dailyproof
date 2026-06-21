@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
+import { recordSecurityEvent } from "@/lib/security-events";
 
 type Day = { d: string; c: number };
 type Grass = { name: string; days: Day[] };
@@ -207,6 +208,7 @@ export async function GET(
   // token 검증 전에 둬 무효 토큰 무차별 대입도 제한한다. (근거: docs/security/rate-limit.md)
   const rl = rateLimit(`grass:${clientIp(req)}`, 60, 60_000);
   if (!rl.allowed) {
+    recordSecurityEvent("rate_limited", { route: "/api/grass" });
     const headers = { "Access-Control-Allow-Origin": "*", "Retry-After": String(rl.retryAfter) };
     return wantsJson
       ? Response.json({ error: "rate_limited" }, { status: 429, headers })
