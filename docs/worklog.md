@@ -1996,3 +1996,29 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `153-sec-csp-reportonly-login-clean-20260621.png` — CSP report-only에서 위반 0(정상 안내만).
 - `154-sec-csp-app-render-ok-20260621.png` — CSP 적용 상태에서 앱(에디터) 정상 렌더.
+
+### 8. 보안 강화 — 쿠키·CSRF 점검 + server action Origin 하드닝
+
+**이전 상태 / 문제**
+
+- 세션 쿠키 속성·CSRF 방어가 정리된 점검 없이 "되겠지" 상태였다. 실제로 안전한지 기준으로 따져본 적 없음.
+
+**한 일**
+
+- `docs/security/cookie-csrf.md` — 기준(쿠키 탈취·CSRF·인가·Origin·메서드)으로 Supabase 쿠키·server action·signout을 평가·판정.
+- `next.config.mjs`에 `serverActions.allowedOrigins`(`dailyproof.obong2.net`·`*.vercel.app`) 명시.
+
+**핵심 설계 (기준→평가→판정: 대부분 이미 안전)**
+
+- **세션 쿠키**: `@supabase/ssr` 기본값(HttpOnly·SameSite=Lax·Secure)을 그대로 적용 → 탈취·CSRF 1차 방어. 직접 지정 안 함(덮어쓰면 실수 여지) → 조치 불요.
+- **server action**: 7개 파일 전부 `requireUser`/`getUser` 가드 + Next 15 내장 CSRF(POST-only·Origin↔Host 검증).
+- **signout**: GET 아닌 POST + SameSite=Lax라 크로스사이트 POST에 쿠키 미전송 → CSRF 로그아웃 불가.
+- **하드닝(유일한 갭)**: 프록시/커스텀 도메인 뒤에선 내부 Host가 외부 도메인과 달라 보일 수 있어 `allowedOrigins`로 신뢰 Origin 명시(정상 도메인 허용 + 그 밖 거부, defense in depth).
+
+**검증**
+
+- config 유효 로드·컴파일 성공. 쿠키·인가·메서드는 코드/라이브러리 기본으로 이미 안전함을 근거와 함께 문서화.
+
+**후속**
+
+- SameSite Lax→Strict는 UX(외부 링크 진입 시 로그인 풀림) 트레이드오프라 Lax 유지. allowedOrigins는 도메인 변경 시 갱신.
