@@ -1,0 +1,33 @@
+# Kyverno ClusterPolicy: 컨테이너는 모든 리눅스 capability를 버려야 한다(drop: ALL).
+# 근거: PSS restricted / 최소 권한 — 불필요한 커널 권한이 침해 시 공격 표면이 된다.
+# 정립·방법론: docs/security/admission-control.md, docs/retrospective/policy-as-code-methodology.md
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-drop-all-caps
+  annotations:
+    policies.kyverno.io/title: Drop all capabilities
+    policies.kyverno.io/category: Pod Security
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-drop-all
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces: [kube-system, kyverno, monitoring, sealed-secrets]
+      validate:
+        message: "모든 컨테이너는 securityContext.capabilities.drop 에 ALL 을 포함해야 합니다."
+        foreach:
+          - list: request.object.spec.containers
+            deny:
+              conditions:
+                all:
+                  - key: ALL
+                    operator: AnyNotIn
+                    value: "{{ element.securityContext.capabilities.drop || `[]` }}"

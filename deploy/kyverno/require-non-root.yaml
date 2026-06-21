@@ -1,0 +1,44 @@
+# Kyverno ClusterPolicy: pod는 non-root로 실행해야 한다.
+# 의미: trivy(CI, 배포 전)가 못 막는 'CI 우회 kubectl apply'까지 클러스터 입구(admission)에서 강제한다.
+#   예방(trivy) + 강제(Kyverno) 2층. 근거·역할 구분: docs/security/admission-control.md
+#
+# validationFailureAction:
+#   Audit   = 위반해도 허용하되 PolicyReport에 기록(관찰).  ← 처음엔 이걸로 우리 워크로드가 통과하는지 본다.
+#   Enforce = 위반 pod를 admission에서 거부(차단).            ← 확인 후 이걸로 올린다.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-non-root
+  annotations:
+    policies.kyverno.io/title: Require non-root
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/description: >-
+      pod는 runAsNonRoot=true 여야 한다. root 컨테이너는 침해 시 권한 상승·호스트 영향이 크다.
+spec:
+  validationFailureAction: Enforce # 위반 pod를 admission에서 거부. (우리 워크로드는 non-root라 통과)
+  background: true # 기존 리소스도 평가해 PolicyReport에 기록
+  rules:
+    - name: check-runAsNonRoot
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      # 시스템 네임스페이스는 제외(그쪽 워크로드는 root가 많아 막으면 클러스터가 깨진다).
+      exclude:
+        any:
+          - resources:
+              namespaces: [kube-system, kyverno, monitoring, sealed-secrets]
+      validate:
+        message: "pod는 non-root로 실행해야 합니다(runAsNonRoot=true). pod 또는 모든 컨테이너 securityContext에 설정하세요."
+        # anyPattern: 둘 중 하나는 '반드시' 만족해야 한다(필수). 둘 다 없으면(예: securityContext 자체가
+        # 없는 root pod) 거부/FAIL. (조건부 앵커 =() 를 쓰면 '없을 때 통과'가 되어 위반을 못 잡는다.)
+        anyPattern:
+          # ① pod 레벨에서 non-root 보장
+          - spec:
+              securityContext:
+                runAsNonRoot: true
+          # ② 또는 모든 컨테이너가 각자 non-root
+          - spec:
+              containers:
+                - securityContext:
+                    runAsNonRoot: true

@@ -1,0 +1,45 @@
+# Kyverno ClusterPolicy: 이미지 태그로 :latest(또는 태그 생략)를 금지한다.
+# 근거: 공급망/재현성 — :latest는 가리키는 내용이 바뀌어 '무엇이 배포됐는지' 추적 불가(롤백·감사 곤란).
+#   (우리 차트는 값으로 태그를 고정한다. trivy의 KSV-0013과 같은 취지를 런타임에서 강제.)
+# 정립·방법론: docs/security/admission-control.md, docs/retrospective/policy-as-code-methodology.md
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow latest tag
+    policies.kyverno.io/category: Supply Chain
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-explicit-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces: [kube-system, kyverno, monitoring, sealed-secrets]
+      validate:
+        message: "이미지 태그를 명시해야 하며 :latest 는 금지입니다(재현성·추적성)."
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"
+    - name: require-tag-present
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces: [kube-system, kyverno, monitoring, sealed-secrets]
+      validate:
+        message: "이미지에 태그가 없습니다(태그 생략 = latest). 명시적 태그를 쓰세요."
+        pattern:
+          spec:
+            containers:
+              - image: "*:*"

@@ -121,11 +121,13 @@
 - [x] `retrospective/imperative-vs-helm-image.md` — helm upgrade가 kubectl set image로 바꾼 이미지를 되돌린 건(명령형 vs 선언형 충돌). API 직접 질의로 진단, 영속은 차트 값/git에 반영해야
 - [x] `retrospective/observability-stack-roles.md` — Prometheus(수집·룰)/Alertmanager(알림 배달)/Grafana(시각화) 역할 구분, "같은 데이터 다른 화면", pending→firing→Alertmanager 흐름
 - [x] `retrospective/gitops-drift-reconcile.md` — kubectl set image 드리프트 해소(git 아는 태그에 실제 코드 담기), pod 죽음→k8s/클러스터 재구성→helm·git, "태그는 포인터"
+- [x] `retrospective/policy-as-code-methodology.md` — 보안 정책 정립 방법론(위협모델·컴플라이언스·업계표준 3근거 → Audit→Enforce 점진 적용), 예방(trivy)·강제(Kyverno)·탐지(Prometheus) 계층
 - [x] `security/findings-triage.md` — 스캐너 findings 28건 triage(real/FP·fix/suppress 판정·근거·사유 기록)
 - [x] `security/rate-limit.md` — rate limit 대상 선정 분석(노출도·악용·비용·기존방어 기준 → 엔드포인트 평가 → grass IP·proof-assets uid 결정, in-memory 한계·edge/Redis 후속)
 - [x] `security/public-url-exposure.md` — 공개 URL 오남용 점검(접근게이트·추측·노출범위·검증일치·소비통제 기준 → media/grass 평가·판정 → grass 토큰 검증 24 hex 하드닝)
 - [x] `security/checklist.md` — 보안 기본기(4.10) 체크리스트(MIME·크기·경로·권한경계·입력검증·rate limit·공개URL·스캐닝·런타임하드닝을 어느 층에서 막나 + 잔여 위험)
 - [x] `security/threat-model.md` — 위협 모델(STRIDE): 신뢰 경계·자산·진입점·행위자 + S/T/R/I/D/E별 위협×완화책×잔여위험·위험등급, 가정·범위밖
+- [x] `security/admission-control.md` — Kyverno 정책 강제(non-root·ro-rootfs·drop ALL·latest 금지), 예방(trivy)·강제(admission)·탐지 계층, Audit→Enforce·scope 예외, 위반 거부 실측
 - [x] `security/security-headers-plan.md` — Security headers 도입 계획(6헤더 값·CSP 디렉티브 충돌원 설계·nonce 방식·report-only→enforce 단계·롤백·검증)
 - [x] `security/cookie-csrf.md` — 쿠키·CSRF 점검(탈취/CSRF/인가/Origin/메서드 기준 → Supabase 쿠키·server action·signout 평가·판정 → serverActions.allowedOrigins 하드닝)
 - [x] `incidents/incident-log.md` — 장애 등록부(실제 겪은 장애 5건 통일 포맷 요약·색인: 빈 build-arg readiness 503·ImagePullBackOff·/metrics 부하 행·CI 플레이크·PostSync hook 막힘. 상세는 회고·runbook으로 링크아웃)
