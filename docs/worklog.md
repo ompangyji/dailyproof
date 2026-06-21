@@ -1979,7 +1979,10 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - **nonce 적용 메커니즘**: 미들웨어가 요청 헤더에 enforcing 이름으로 CSP를 실어 Next가 nonce를 추출해 자기 `<script>`에 부여 → 응답은 처음엔 report-only로만 내보내 차단 없이 관찰.
 - **단계 전략**: report-only로 전 기능 관찰 → 위반 0 확인 → enforce 승격. 롤백은 헤더 한 줄(데이터 무관).
 - **HSTS preload 제외**: 브라우저 내장 목록이라 롤백이 수주~수개월 → [retrospective/hsts-preload.md](retrospective/hsts-preload.md).
-- **CI e2e 깨짐 → standalone 조건화**: enforce 후 CI e2e가 로그인 폼 미렌더로 실패. 원인은 nonce CSP가 *요청별 동적 렌더*를 전제하는데, e2e가 `next start` + `output: standalone`(비호환 조합 — Next가 경고)으로 기동해 동적 렌더가 깨져 스크립트 nonce가 응답 헤더 nonce와 불일치 → CSP가 하이드레이션 스크립트 차단 → `useSearchParams`+Suspense 폼이 영영 안 그려짐(헤딩은 Suspense 밖이라 보임). Vercel은 nonce 감지 시 자동 동적 렌더라 정상(배포본 A+·기능 정상)이었고 CI만 노출. 해결: `output: standalone`을 `BUILD_STANDALONE=1`(Docker 빌드)일 때만 켜고, e2e·일반 빌드는 표준 출력 → `next start` 정상 → nonce 일치.
+- **CI e2e 깨짐 (트러블슈팅 2단계)**: enforce 후 CI e2e가 로그인 폼 미렌더로 실패. **증상** — 헤딩("DailyProof")은 보이는데 `useSearchParams`+Suspense 안의 폼(이메일·Sign up)이 안 그려짐 → 클라이언트 하이드레이션이 막혔다는 신호.
+  - **1차 시도(가설 → 실패)**: "nonce CSP는 요청별 동적 렌더가 전제인데 e2e가 `next start` + `output: standalone`(Next가 비호환 경고)으로 기동해 동적 렌더가 깨진 것"으로 보고, `output: standalone`을 `BUILD_STANDALONE=1`(Docker)일 때만 켜도록 조건화. → **CI 재실행도 동일 실패.** standalone을 꺼도 안 고쳐졌으므로 오진.
+  - **2차(진짜 원인 → 해결)**: 실제 원인은 **root layout이 `headers()`를 안 읽어 페이지가 정적 prerender**된 것. 정적이면 빌드 타임 스크립트에 nonce가 없는데 응답 헤더엔 요청별 nonce → `strict-dynamic`이 그 스크립트를 통째로 차단 → 하이드레이션 실패. **해결: root layout을 async로 만들어 `await headers()`로 nonce를 읽어 앱 전체를 동적 렌더로 전환** → Next가 각 요청 nonce를 스크립트에 부여 → CSP 일치. (Next 공식 CSP 패턴의 빠졌던 조각.)
+  - **교훈**: Vercel **A+는 헤더 *존재*만 스캔**한 거라 JS가 CSP에 막혀 깨진 것까지는 못 잡는다 — "등급 통과 ≠ 기능 정상". 그리고 첫 진단(standalone)에 매달리지 말고 *고쳐지는지*로 가설을 검증해야 했다. (standalone 조건화 자체는 `next start` 비호환 정리로 남겨둠.)
 - Edge 런타임이라 nonce 생성에 Buffer 대신 `btoa`. grass·정적자산은 미들웨어 matcher 제외라 CSP 미적용(정적 헤더만), grass는 SVG라 무관.
 - **정보 노출 최소화**: `poweredByHeader: false`로 `X-Powered-By: Next.js` 제거. CSP가 켜진 건 숨길 수 없고(헤더로 공개·nonce라 알아도 못 뚫음) 숨길 필요도 없지만, 기술스택 힌트는 줄 필요 없는 정보라 따로 제거. → [retrospective/csp-not-secret.md](retrospective/csp-not-secret.md).
 
