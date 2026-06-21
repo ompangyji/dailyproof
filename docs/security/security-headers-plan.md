@@ -63,6 +63,13 @@
 2. **CSP 적용 지점 → 미들웨어**(`src/middleware.ts`, nonce 때문). 정적 5개 헤더는 `next.config`.
 3. **HSTS → `preload` 제외**(`max-age=63072000; includeSubDomains`). 이유는 [retrospective/hsts-preload.md](../retrospective/hsts-preload.md) — preload는 브라우저에 하드코딩돼 되돌리기가 수주~수개월이라, 영구 HTTPS 확신 후 후속으로 둔다.
 
+## 적용 결과
+
+- 정적 5개 헤더 → `next.config.mjs` `headers()`(전역). CSP → `src/middleware.ts`에서 요청별 nonce로 생성.
+- **report-only로 전 기능 관찰**(로그인·회원가입·대시보드/에디터·grass) → `Refused to...` 위반 0건, `upgrade-insecure-requests ignored in report-only`(정상 안내)만 확인(자료 153) → **enforce로 승격**.
+- `curl -I`로 6종 헤더 + nonce가 실제 `<script>`에 적용됨 확인. 앱 정상 렌더(자료 154).
+- script-src는 nonce+strict-dynamic로 enforce(A 폴백 불필요).
+
 ## 잔여/후속
 
 - CSP 위반 리포트 수집 엔드포인트(`report-uri`/`report-to`)는 후속(지금은 콘솔 관찰로 충분).
