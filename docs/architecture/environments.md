@@ -53,6 +53,22 @@ dev (로컬) → staging 자동 배포 → smoke test 통과 → prod 반영
 
 ---
 
+## 3.1 컴포넌트별 배포 타깃 (web ≠ worker)
+
+web과 worker는 실행 모델이 달라 **배포되는 곳도 다르다.** 한 군데에 같이 올리면 안 되는 이유가 있다.
+
+| 컴포넌트 | 실행 모델 | 배포 타깃 | 필요한 env |
+|---|---|---|---|
+| **web** (Next.js) | 요청 기반·stateless | **Vercel**(서버리스) 또는 k3s | `NEXT_PUBLIC_*`(공개값)만 |
+| **worker** | **상주 폴링** 프로세스(`jobs` 큐를 주기적으로 claim) | 상주 환경 — 로컬/컨테이너/**k3s**. 서버리스 불가 | `SUPABASE_SERVICE_ROLE_KEY`·`WORKER_*`(서버 전용) |
+
+- **서버리스(Vercel)에 worker를 못 두는 이유**: worker는 요청이 없어도 큐를 계속 폴링하는 *상주* 프로세스인데, 서버리스는 요청이 있을 때만 깨어나고 잠든다 → 폴링이 끊긴다. 그래서 worker는 항상 켜져 있는 환경(컨테이너/k3s)에서 돈다.
+- **Vercel 단독 배포의 함의**: web만 떠 있으면 로그인·기록·업로드(브라우저→Storage 직행)는 정상이지만, **업로드 후처리는 worker가 해야 하므로 미동작**(asset이 `uploaded`에 머묾). 버그가 아니라 worker 미기동이다.
+- **시크릿 분리**: `SUPABASE_SERVICE_ROLE_KEY`는 **worker만** 쓰는 RLS 우회 키다. web(Vercel)은 참조하지 않으므로 **Vercel 환경변수에 넣지 않는다** — 안 쓰는 god-mode 키를 인터넷 노출 프론트엔드에 두면 공격 표면만 늘린다. (admin 기능도 web에 service_role을 두지 않으려고 `SECURITY DEFINER` RPC로 설계했다.)
+- **`NEXT_PUBLIC_*`는 빌드 타임 인라인**: 번들에 값이 박히므로, 변경 시 환경변수 수정만으로 안 되고 **재배포(rebuild)** 해야 반영된다. (stale anon 키면 Supabase가 `Unregistered API key` 401.)
+
+---
+
 ## 4. 환경 변수 정리
 
 현재(`current-state.md`)는 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` 둘뿐이다. 목표 구조에서 추가될 변수를 환경별로 정리한다.
