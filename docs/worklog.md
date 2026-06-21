@@ -2074,3 +2074,30 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - helm 렌더(jaeger on: Deployment+Service `jaeger`+jaeger-ingress / off: 0)·lint 통과. 런타임(클러스터 배포 후 port-forward로 트레이스 수집 UI) 검증 예정.
 - **trivy hard gate 통과 수정**: jaeger pod에 securityContext를 빠뜨려 KSV-0014(readOnlyRootFilesystem)·KSV-0118(default security context) HIGH 3건 발생 → web·worker와 동일 하드닝(runAsNonRoot·seccomp RuntimeDefault·readOnlyRootFilesystem·drop ALL caps + 쓰기용 `/tmp` emptyDir) 적용. 렌더본 trivy 재스캔 HIGH/CRITICAL 0 확인. (교훈: 새 워크로드 추가 시 기존 securityContext 하드닝을 함께 적용해야 게이트에 안 걸린다.)
+
+### 11. 보안 강화 — 시크릿 관리 (sealed-secrets)
+
+**이전 상태 / 문제**
+
+- 시크릿 실값을 `values-secret.yaml`(gitignored)·`--set`·`argocd app set -p`로 주입 → git엔 placeholder만(평문 안 올라감)이지만, **실값이 클러스터/로컬에만 존재해 GitOps "git이 source of truth"가 시크릿만 깨짐**(수동 주입·휴먼 의존, 복구 추적 안 됨).
+
+**한 일 (컨트롤러 설치 + 실제 봉인까지)**
+
+- **sealed-secrets 컨트롤러**(v0.38.1) 클러스터 설치 + **kubeseal CLI** 로컬 설치.
+- 클러스터의 기존 `dp-dailyproof-secret`을 `kubeseal`로 봉인(평문 미출력, 파이프로 통과) → `deploy/sealed-secrets/dailyproof-secret.yaml`(암호문) 생성.
+- `.gitignore`에 예외 — SealedSecret은 암호화돼 있어 **커밋**(컨트롤러만 복호화).
+- `docs/runbooks/secret-management.md` — 원리·설치·봉인·적용·복구·회전·키백업 주의 + sealed vs external 비교.
+
+**핵심 설계**
+
+- **암호화해 git 커밋**: 컨트롤러의 비대칭 키쌍 — 공개키로 봉인(누구나), 개인키로 복호(그 클러스터 컨트롤러만). 그래서 암호문을 git에 올려도 안전 → 시크릿까지 source of truth에 포함.
+- **왜 sealed-secrets(vs external-secrets)**: 외부 시크릿 store(Vault/AWS SM)가 없는 단일 클러스터라 "암호화해 커밋"이 정확히 맞음. ESO는 외부 store 전제라 과함.
+- **복구 주의**: 복호화는 컨트롤러 개인키 → 클러스터 재생성 시 키가 달라져 못 풂 → 봉인 키 백업 또는 재봉인 필요(문서화).
+
+**검증 (실측)**
+
+- 컨트롤러 `Running` + `kubeseal 0.38.1`. SealedSecret apply → `kubectl get sealedsecret,secret -n dailyproof`에 **둘 다 표시**(암호문 → 컨트롤러 복호화 → 실제 Secret 생성 동작 확인). 봉인 파일에 JWT 평문(`eyJ…`) 0건, `encryptedData`만 → 커밋 안전.
+
+**자료**
+
+- `159-sec-sealedsecret-seal-decrypt-20260621.png` — 봉인(encryptedData) → apply → `get sealedsecret,secret`에 SealedSecret·Secret 둘 다(암호문→복호화 동작).

@@ -54,6 +54,8 @@ next-env.d.ts
 
 # Helm secret values (실값 — 커밋 금지)
 deploy/helm/**/values-secret.yaml
+# 단, sealed-secrets(deploy/sealed-secrets/)는 암호화된 SealedSecret이라 커밋한다(컨트롤러만 복호화).
+# 근거·절차: docs/runbooks/secret-management.md
 
 # Terraform (상태·시크릿 — 커밋 금지)
 deploy/terraform/terraform.tfvars
