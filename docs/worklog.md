@@ -1956,3 +1956,37 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - `152-sec-bucket-config-mime-size-20260621.png` — media 버킷이 비공개·8MB·image/\*를 server-side 강제(클라/API와 별개의 우회 불가 게이트).
+
+### 7. 보안 강화 — Security headers (CSP nonce 포함)
+
+**이전 상태 / 문제**
+
+- 응답 보안 헤더가 전무(HSTS·CSP·X-Frame 등 0). 브라우저가 강제하는 방어층(XSS·클릭재킹·MITM)을 안 쓰고 있었다.
+
+**목적**
+
+- 6개 보안 헤더를 추가하되, **무작정 적용하지 않고** 충돌원·적용 지점·검증·롤백을 먼저 계획(`security-headers-plan.md`)한 뒤 단계적으로 넣는다. CSP는 깨질 수 있어 report-only → enforce로.
+
+**한 일**
+
+- 정적 5개 헤더(`next.config.mjs` headers, 전역): HSTS(`max-age` + includeSubDomains, **preload 제외**)·nosniff·X-Frame DENY·Referrer-Policy·Permissions-Policy.
+- **CSP를 미들웨어에서 요청별 nonce로 생성**: script-src `'nonce-…' 'strict-dynamic'`(인라인 스크립트 XSS 차단), style-src `'unsafe-inline'`(React inline style), img/connect는 self+Supabase, frame-ancestors none. dev는 HMR용 `'unsafe-eval'`·`ws:` 추가.
+
+**핵심 설계**
+
+- **nonce 적용 메커니즘**: 미들웨어가 요청 헤더에 enforcing 이름으로 CSP를 실어 Next가 nonce를 추출해 자기 `<script>`에 부여 → 응답은 처음엔 report-only로만 내보내 차단 없이 관찰.
+- **단계 전략**: report-only로 전 기능 관찰 → 위반 0 확인 → enforce 승격. 롤백은 헤더 한 줄(데이터 무관).
+- **HSTS preload 제외**: 브라우저 내장 목록이라 롤백이 수주~수개월 → [retrospective/hsts-preload.md](retrospective/hsts-preload.md).
+- Edge 런타임이라 nonce 생성에 Buffer 대신 `btoa`. grass·정적자산은 미들웨어 matcher 제외라 CSP 미적용(정적 헤더만), grass는 SVG라 무관.
+- **정보 노출 최소화**: `poweredByHeader: false`로 `X-Powered-By: Next.js` 제거. CSP가 켜진 건 숨길 수 없고(헤더로 공개·nonce라 알아도 못 뚫음) 숨길 필요도 없지만, 기술스택 힌트는 줄 필요 없는 정보라 따로 제거. → [retrospective/csp-not-secret.md](retrospective/csp-not-secret.md).
+
+**검증**
+
+- report-only 관찰: 로그인·회원가입·대시보드/에디터·grass에서 `Refused to...` 위반 0건(자료 153). → enforce 전환.
+- `curl -I`로 6종 헤더 + `Content-Security-Policy`(enforce)·nonce가 실제 `<script>`에 적용됨 확인. 앱 정상 렌더(자료 154). tsc 클린·build 컴파일 성공.
+- (후속) Vercel 배포 도메인을 securityheaders.com으로 스캔해 등급 증거.
+
+**자료**
+
+- `153-sec-csp-reportonly-login-clean-20260621.png` — CSP report-only에서 위반 0(정상 안내만).
+- `154-sec-csp-app-render-ok-20260621.png` — CSP 적용 상태에서 앱(에디터) 정상 렌더.
