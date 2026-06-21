@@ -22,6 +22,13 @@ spec:
       labels:
         {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "jaeger") | nindent 8 }}
     spec:
+      # web·worker와 동일한 런타임 하드닝(non-root·seccomp). all-in-one은 in-memory 저장이라
+      # 디스크 영속이 없어 readOnlyRootFilesystem이 가능하고, 쓰기 필요한 /tmp만 emptyDir로 연다.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001 # jaeger 이미지의 비루트 유저
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: jaeger
           image: {{ .Values.jaeger.image }}
@@ -31,9 +38,19 @@ spec:
           ports:
             - { name: ui, containerPort: 16686 }
             - { name: otlp-http, containerPort: 4318 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 250m, memory: 512Mi }
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 # Service 이름 'jaeger' — web/worker의 OTLP 엔드포인트(http://jaeger:4318)가 이 이름으로 해석된다.
 apiVersion: v1

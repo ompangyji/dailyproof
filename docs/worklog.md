@@ -2073,3 +2073,4 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **검증**
 
 - helm 렌더(jaeger on: Deployment+Service `jaeger`+jaeger-ingress / off: 0)·lint 통과. 런타임(클러스터 배포 후 port-forward로 트레이스 수집 UI) 검증 예정.
+- **trivy hard gate 통과 수정**: jaeger pod에 securityContext를 빠뜨려 KSV-0014(readOnlyRootFilesystem)·KSV-0118(default security context) HIGH 3건 발생 → web·worker와 동일 하드닝(runAsNonRoot·seccomp RuntimeDefault·readOnlyRootFilesystem·drop ALL caps + 쓰기용 `/tmp` emptyDir) 적용. 렌더본 trivy 재스캔 HIGH/CRITICAL 0 확인. (교훈: 새 워크로드 추가 시 기존 securityContext 하드닝을 함께 적용해야 게이트에 안 걸린다.)
