@@ -2022,3 +2022,9 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **후속**
 
 - SameSite Lax→Strict는 UX(외부 링크 진입 시 로그인 풀림) 트레이드오프라 Lax 유지. allowedOrigins는 도메인 변경 시 갱신.
+
+**배포 문서 보강 (Vercel 401 디버깅 중 드러난 갭)**
+
+- 배포본에서 `Unregistered API key` 401(로그인 실패)을 진단하다, "web=Vercel / worker=별도 상주 환경" 분리와 그 운영 함의가 문서에 없던 걸 발견 → 보강.
+- `README.md` Vercel 배포 섹션: Vercel은 web만 호스팅(worker는 서버리스 불가) · 환경변수는 `NEXT_PUBLIC_*` 2개만(service_role·`WORKER_*`는 넣지 말 것 — worker 전용·god-mode) · `NEXT_PUBLIC_*`는 빌드 타임 인라인이라 변경 시 재배포 필요 · 후처리는 worker 미기동 시 미동작.
+- `architecture/environments.md`에 "3.1 컴포넌트별 배포 타깃(web≠worker)" 표·근거 추가.

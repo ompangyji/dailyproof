@@ -39,14 +39,30 @@ http://localhost:3000
 
 ### 3. Vercel 배포
 
+> **Vercel은 web(Next.js)만 호스팅한다.** worker는 상주 폴링 프로세스라 서버리스(Vercel)에서
+> 돌 수 없어 별도 환경(로컬/컨테이너/k3s)에서 실행한다. 그래서 Vercel 단독 배포 시 **로그인·기록·
+> 업로드는 정상 동작하지만, 업로드 후처리(thumbnail·메타데이터·`ready` 전이)는 worker를 따로 띄워야
+> 동작한다**(이미지가 `uploaded` 상태에 머물면 버그가 아니라 worker 미기동). 컴포넌트별 배포 타깃은
+> [architecture/environments.md](docs/architecture/environments.md) 참조.
+
 1. GitHub에 푸시
 2. [vercel.com](https://vercel.com)에서 Import → 이 레포 선택
-3. Environment Variables 에 다음 두 개 추가:
+3. Environment Variables 에 **이 두 개만** 추가(web이 쓰는 공개값):
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - ⚠️ `SUPABASE_SERVICE_ROLE_KEY`·`WORKER_*`는 **넣지 않는다** — web이 참조하지 않는 worker 전용
+     값이고, 특히 service_role은 RLS를 우회하는 god-mode 키라 프론트엔드 배포에 두면 노출 위험만 커진다.
 4. Deploy
 5. 배포 후 Supabase → Authentication → URL Configuration 에서
    `Site URL` 과 `Redirect URLs` 에 Vercel 도메인 등록 (이메일 확인 링크용)
+
+> **`NEXT_PUBLIC_*`는 빌드 시점에 번들로 인라인된다** — 값을 바꾸면 환경변수만 수정해선 반영되지 않고
+> **재배포(rebuild)** 해야 한다. (anon 키가 stale하면 Supabase가 `Unregistered API key` 401을 던진다.)
+>
+> **anon 키 세대 차이(레거시 `eyJ…` vs 새 `sb_publishable_…`)**: 둘 다 같은 프로젝트의 유효한 키지만,
+> 환경에 따라 인증되는 쪽이 다를 수 있다(관측: 로컬은 `sb_publishable_`, Vercel은 레거시 `eyJ`가 동작).
+> 통일을 강제하지 말고 **각 환경에서 실제로 인증되는 키**를 쓴다. `Unregistered API key` 401이면 그 환경에서
+> 무효화된 키 세대를 쓰는 것이니 동작하는 세대로 교체 후 재배포.
 
 ## 디렉토리 구조
 
