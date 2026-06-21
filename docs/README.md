@@ -120,6 +120,7 @@
 - [x] `retrospective/stale-image-metrics.md` — Prometheus Target은 UP인데 보안 메트릭이 없던 건(배포 이미지가 계측 코드 이전). "git 머지≠클러스터 실행", 내부 curl로 /metrics 직접 확인·이미지 재빌드·k3s import 절차
 - [x] `retrospective/imperative-vs-helm-image.md` — helm upgrade가 kubectl set image로 바꾼 이미지를 되돌린 건(명령형 vs 선언형 충돌). API 직접 질의로 진단, 영속은 차트 값/git에 반영해야
 - [x] `retrospective/observability-stack-roles.md` — Prometheus(수집·룰)/Alertmanager(알림 배달)/Grafana(시각화) 역할 구분, "같은 데이터 다른 화면", pending→firing→Alertmanager 흐름
+- [x] `retrospective/gitops-drift-reconcile.md` — kubectl set image 드리프트 해소(git 아는 태그에 실제 코드 담기), pod 죽음→k8s/클러스터 재구성→helm·git, "태그는 포인터"
 - [x] `security/findings-triage.md` — 스캐너 findings 28건 triage(real/FP·fix/suppress 판정·근거·사유 기록)
 - [x] `security/rate-limit.md` — rate limit 대상 선정 분석(노출도·악용·비용·기존방어 기준 → 엔드포인트 평가 → grass IP·proof-assets uid 결정, in-memory 한계·edge/Redis 후속)
 - [x] `security/public-url-exposure.md` — 공개 URL 오남용 점검(접근게이트·추측·노출범위·검증일치·소비통제 기준 → media/grass 평가·판정 → grass 토큰 검증 24 hex 하드닝)
