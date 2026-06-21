@@ -2122,3 +2122,21 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **검증**
 
 - 루트 배치라 GitHub가 Security 탭에서 인식(병합 후 확인). 새 코드 없음(문서).
+
+### 13. gitleaks 오탐 처리 — SealedSecret 암호문 allowlist
+
+**문제**
+
+- sealed-secrets merge 후 CI **gitleaks(secret 게이트)가 차단**. `deploy/sealed-secrets/dailyproof-secret.yaml:9`의 `encryptedData` 암호문이 높은 엔트로피(5.94) 때문에 `generic-api-key`로 오탐.
+
+**핵심 판단 (오탐)**
+
+- 잡힌 값은 **봉인된 ciphertext**(`AgBw…`) — 컨트롤러 개인키 없이는 못 푸는, **git 커밋이 의도된** 산출물이다. 실제 평문 누출 아님(앞서 `eyJ` 0건 확인). gitleaks는 "긴 랜덤 문자열 = 키일 수도"로 보는데, sealed-secrets는 그 전제와 어긋난다.
+
+**한 일**
+
+- 루트 `.gitleaks.toml` 추가 — `[extend] useDefault=true`로 **기본 룰은 유지**하고, `allowlist.paths`에 `deploy/sealed-secrets/.*\.yaml$`만 예외. 그 디렉토리엔 SealedSecret(encryptedData)만 둔다는 전제를 주석으로 명시.
+
+**검증**
+
+- TOML 파싱 OK + allowlist 정규식이 봉인 파일과 매치 확인(로컬). 실스캔은 CI에서. (교훈: 보안 도구도 컨텍스트를 모르면 오탐한다 — 의도된 암호문 산출물은 근거와 함께 좁게 allowlist.)

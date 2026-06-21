@@ -1,0 +1,18 @@
+# gitleaks 설정 — 기본 룰 유지 + 프로젝트 예외(allowlist).
+# 근거: docs/runbooks/secret-management.md, docs/security/findings-triage.md
+title = "DailyProof gitleaks config"
+
+# 기본 룰셋을 그대로 확장(끄지 않는다).
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+SealedSecrets(deploy/sealed-secrets/)는 컨트롤러 공개키로 비대칭 암호화된 ciphertext다.
+git 커밋이 '의도된' 안전한 산출물이며(클러스터 내 컨트롤러 개인키만 복호화 가능), 평문 시크릿이
+아니다. gitleaks가 높은 엔트로피 때문에 generic-api-key로 오탐하므로 이 경로만 예외 처리한다.
+이 디렉토리에는 kubeseal로 생성한 SealedSecret(encryptedData)만 둔다 — 평문 Secret 금지.
+"""
+paths = [
+  '''deploy/sealed-secrets/.*\.yaml$''',
+]
