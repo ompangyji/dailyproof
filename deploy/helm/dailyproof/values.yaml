@@ -61,6 +61,13 @@ postSyncSmoke:
   enabled: true
   image: curlimages/curl:8.11.1
 
+# 관측 연동(kube-prometheus-stack). ServiceMonitor(web /metrics scrape) + PrometheusRule(보안 알림)
+# + scrape용 NetworkPolicy. CRD가 필요해 스택 설치 후 켠다(기본 off). 근거: docs/architecture/metrics.md
+monitoring:
+  enabled: false
+  prometheusRelease: kps # kube-prometheus-stack 릴리스명(ServiceMonitor/Rule 선택 라벨)
+  namespace: monitoring # Prometheus가 사는 네임스페이스(scrape ingress 허용 대상)
+
 # 관측: 트레이스 수집(jaeger all-in-one). web·worker가 http://jaeger:4318 로 보내므로 Service명=jaeger.
 # UI(16686)는 인증 없어 ingress 미노출 → port-forward로 접근. 저장 in-memory(데모). 근거: architecture/tracing.md
 jaeger:

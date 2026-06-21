@@ -2190,4 +2190,45 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - `161-sec-metrics-counter-trigger-20260622.png` — 콘솔에서 grass 65회 호출(rate limit 유발).
 - `162-sec-metrics-counter-after-5-20260622.png` — `security_events_total{type="rate_limited"} 5`로 증가(계측 동작).
 
-65-b(Prometheus 배포)에서 scrape·알림 firing으로 강화 예정.
+### 16. 관측 — kube-prometheus-stack 배포 + 보안 알림 firing
+
+**이전 상태 / 문제**
+
+- 보안 카운터(`dailyproof_security_events_total`)를 노출만 했을 뿐, 아무도 scrape하지 않아 알림이 없었다. "공격 시도가 늘면 알림"을 실제로 동작시켜야 했다.
+
+**한 일 (풀스택, 실제 배포·검증)**
+
+- **kube-prometheus-stack 설치**(Prometheus+Alertmanager+Grafana+operator). `helm install kps prometheus-community/kube-prometheus-stack -n monitoring --create-namespace --wait`.
+- 차트에 `templates/monitoring.yaml`(신규, `monitoring.enabled` 토글): **ServiceMonitor**(web `/metrics` scrape) + **PrometheusRule**(보안 알림 3개) + **scrape용 NetworkPolicy**(monitoring ns→web:3000, default-deny 보완). Prometheus 선택 라벨 `release: kps`.
+- 알림 룰: `SecurityRateLimitSpike`/`ForbiddenSpike`/`UnauthorizedSpike` — 데모 친화 `increase(...[2m]) > N, for: 30s`.
+
+**핵심 설계·트러블슈팅** (각 회고로 분리)
+
+- WSL2 node-exporter `CreateContainerError` → `mount --make-rshared /` ([retrospective/wsl-node-exporter-mount.md](retrospective/wsl-node-exporter-mount.md)).
+- "Target UP인데 보안 메트릭 없음" = 배포 이미지가 계측 코드 이전 → 재빌드·k3s import ([retrospective/stale-image-metrics.md](retrospective/stale-image-metrics.md)).
+- `helm upgrade`가 `kubectl set image`를 되돌림(명령형 vs 선언형 충돌) → 이미지는 차트 값으로 박아야 ([retrospective/imperative-vs-helm-image.md](retrospective/imperative-vs-helm-image.md)).
+- port-forward 불안정 우회: **클러스터 내부 일회성 curl pod**로 트래픽 생성·Prometheus API 직접 질의.
+
+**검증 (실측, 명령 포함)**
+
+```bash
+# 트래픽(rate limit 유발) — 내부 pod에서
+kubectl run sf$RANDOM --rm -i --restart=Never --image=curlimages/curl:8.11.1 -n dailyproof --command -- \
+  sh -c 'i=0; while [ $i -lt 120 ]; do curl -s -o /dev/null http://dp-dailyproof-web:3000/api/grass/deadbeef12345678?format=json; i=$((i+1)); done; echo ok'
+# Prometheus가 본 알림 expr 값
+kubectl run q --rm -i --image=curlimages/curl:8.11.1 -n monitoring --command -- \
+  sh -c 'curl -s "http://kps-kube-prometheus-stack-prometheus:9090/api/v1/query?query=sum(increase(dailyproof_security_events_total%7Btype%3D%22rate_limited%22%7D%5B2m%5D))"'
+```
+- Targets에 `dp-dailyproof-web` UP, Graph에 보안 메트릭(rate_limited 20+) 수집 확인.
+- 트래픽 유발 → `increase[2m]=22.5~80` > 임계 → 알림 **PENDING(for 대기) → FIRING** 전이 확인.
+
+**자료**
+
+- `163-obs-prometheus-targets-up-20260622.png` — Targets에 web UP(scrape 동작).
+- `164-obs-prometheus-security-metric-20260622.png` — Graph에서 `dailyproof_security_events_total` 시계열(web pod 라벨).
+- `165-obs-alert-pending-20260622.png` — `SecurityRateLimitSpike` PENDING(Value 26.6, for:30s 대기).
+- `166-obs-alert-firing-20260622.png` — 동 알림 **FIRING**(Value 80) — 보안 거부→메트릭→scrape→알림 풀스택 동작.
+- `167-obs-grafana-security-metric-20260622.png` — Grafana Explore에서 `dailyproof_security_events_total` 시계열 시각화(같은 메트릭, 다른 화면).
+- `168-obs-alertmanager-security-alert-20260622.png` — Alertmanager에 `SecurityRateLimitSpike` 전달(필터 `alertname=…`, area/severity 라벨) — Prometheus firing→Alertmanager 배달 확인.
+
+컴포넌트 역할 구분은 회고로 분리: [retrospective/observability-stack-roles.md](retrospective/observability-stack-roles.md) — Prometheus(수집·저장·룰 평가)/Alertmanager(알림 배달)/Grafana(시각화), "같은 데이터 다른 화면", pending→firing→Alertmanager 흐름. (firing은 `for:30s` 채워야 Alertmanager로 넘어감 — 그 전까지 pending.)
