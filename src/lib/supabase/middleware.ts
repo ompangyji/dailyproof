@@ -20,7 +20,7 @@ function buildCsp(nonce: string): string {
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' blob: data: ${supabase}`.trim(),
-    `font-src 'self'`,
+    `font-src 'self' data:`, // 일부 아이콘 폰트가 base64 data: URI로 인라인됨(next/font는 self-host)
     `connect-src 'self' ${supabase}${dev ? " ws:" : ""}`.trim(),
     `object-src 'none'`,
     `base-uri 'self'`,
