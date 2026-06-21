@@ -21,6 +21,15 @@ const nextConfig = {
   //   e2e(next start)·일반 빌드에선 끄고 표준 빌드를 쓴다. 안 그러면 CSP nonce가 의존하는
   //   요청별 동적 렌더가 깨져 하이드레이션이 막힌다. Vercel은 output을 무시하므로 영향 없음.
   output: process.env.BUILD_STANDALONE === "1" ? "standalone" : undefined,
+  // Server Action CSRF 방어(defense in depth): Next는 기본적으로 Origin↔Host를 비교하는데,
+  // 프록시/커스텀 도메인(Vercel·Ingress) 뒤에선 내부 Host가 외부 도메인과 달라 보일 수 있어
+  // 신뢰 Origin을 명시한다. 여기 없는 Origin의 server action 호출은 거부된다.
+  // (근거·점검: docs/security/cookie-csrf.md)
+  experimental: {
+    serverActions: {
+      allowedOrigins: ["dailyproof.obong2.net", "*.vercel.app"],
+    },
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
