@@ -2101,3 +2101,24 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **자료**
 
 - `159-sec-sealedsecret-seal-decrypt-20260621.png` — 봉인(encryptedData) → apply → `get sealedsecret,secret`에 SealedSecret·Secret 둘 다(암호문→복호화 동작).
+
+### 12. 보안 강화 — SECURITY.md (취약점 신고 정책)
+
+**이전 상태 / 문제**
+
+- 취약점을 발견해도 비공개로 신고할 절차·채널이 없었다(공개 이슈로 올리면 수정 전 악용 위험).
+
+**한 일**
+
+- 루트 `SECURITY.md` 작성 — GitHub Security 탭이 자동 인식하는 표준 정책.
+- 섹션: 지원 버전(main) · **비공개 신고(GitHub Security Advisory)** · 신고 포함 정보 · 범위/범위밖 · 응답·coordinated disclosure · **safe harbor(선의 연구 보호)** · 이미 적용한 통제 요약(checklist 링크).
+
+**핵심 설계**
+
+- 연락처는 **GitHub Security Advisory 비공개 보고**만(이메일 노출 없이 깔끔).
+- 표준 템플릿에서 흔히 빠지는 **safe harbor·신고 포함정보·공개 정책**까지 포함.
+- 정직한 프레이밍: 포트폴리오 프로젝트지만 "신고 절차를 갖춘다"는 의도.
+
+**검증**
+
+- 루트 배치라 GitHub가 Security 탭에서 인식(병합 후 확인). 새 코드 없음(문서).
