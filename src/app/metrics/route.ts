@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createLogger } from "@/lib/log";
 import { requestIdFrom } from "@/lib/request-id";
+import { securityEventsMetricLines } from "@/lib/security-events";
+
+// DB 스냅샷 본문(캐시 대상)에 보안 이벤트 카운터를 응답 시점에 덧붙인다. 카운터는 in-process라
+// 매 요청 최신값이어야 해서 캐시와 분리한다(스냅샷만 TTL 캐시, 카운터는 always-fresh).
+function withSecurityMetrics(snapshotBody: string): string {
+  return snapshotBody.replace(/\n*$/, "\n") + securityEventsMetricLines().join("\n") + "\n";
+}
 
 // Prometheus 텍스트 포맷 메트릭. 전역 상태별 카운트를 metrics_snapshot()(SECURITY DEFINER,
 // 집계만 반환)에서 받아 게이지로 노출한다. Prometheus가 주기적으로 scrape(추후 k3s).
@@ -65,10 +72,10 @@ async function buildSnapshotBody(): Promise<string> {
 export async function GET(req: Request) {
   const log = createLogger({ request_id: requestIdFrom(req), route: "/metrics" });
 
-  // 1) 신선한 캐시면 DB를 안 친다.
+  // 1) 신선한 캐시면 DB를 안 친다. (보안 카운터는 캐시와 무관하게 최신값으로 덧붙임)
   const now = Date.now();
   if (cache && now - cache.at < TTL_MS) {
-    return new NextResponse(cache.body, { status: 200, headers: TEXT_HEADERS });
+    return new NextResponse(withSecurityMetrics(cache.body), { status: 200, headers: TEXT_HEADERS });
   }
 
   // 2) 캐시 미스 — 동시 요청은 같은 in-flight 조회를 공유한다(single-flight).
@@ -81,12 +88,12 @@ export async function GET(req: Request) {
     }
     const body = await inflight;
     cache = { at: Date.now(), body };
-    return new NextResponse(body, { status: 200, headers: TEXT_HEADERS });
+    return new NextResponse(withSecurityMetrics(body), { status: 200, headers: TEXT_HEADERS });
   } catch (e) {
     // 3) 신선화 실패 — 직전 정상값(stale)이 너무 오래되지 않았으면 그걸로 응답(10초 행보다 낫다).
     if (cache && Date.now() - cache.at < STALE_MAX_MS) {
       log.warn("metrics 신선화 실패 — stale 캐시 반환", { error: (e as Error).message });
-      return new NextResponse(cache.body, { status: 200, headers: { ...TEXT_HEADERS, "X-Metrics-Stale": "1" } });
+      return new NextResponse(withSecurityMetrics(cache.body), { status: 200, headers: { ...TEXT_HEADERS, "X-Metrics-Stale": "1" } });
     }
     log.warn("metrics 수집 실패", { error: (e as Error).message });
     return new NextResponse(`# metrics unavailable\n`, {
