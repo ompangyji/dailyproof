@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Bowlby_One, Inter_Tight, Knewave } from "next/font/google";
 import "./globals.css";
 
@@ -28,9 +29,13 @@ export const metadata: Metadata = {
   description: "Log your daily routines and moments on the calendar.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // 미들웨어가 심은 요청별 CSP nonce를 읽는다. headers() 호출 자체가 앱을 '동적 렌더'로
+  // 전환시켜, Next가 자기 <script>에 이 요청의 nonce를 부여하게 한다(정적 prerender면 빌드
+  // 타임 스크립트에 nonce가 없어 strict-dynamic CSP가 하이드레이션을 통째로 막는다).
+  await headers();
   return (
     <html
       lang="en"
