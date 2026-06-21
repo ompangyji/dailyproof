@@ -73,7 +73,21 @@ npm run worker   # worker (별도 터미널)
 
 ---
 
-## 5. 후속
+## 5. k8s 배포 (jaeger)
+
+로컬은 docker-compose에 jaeger가 있지만, k8s(helm) 차트엔 없어 배포 환경에서 트레이스 수신처가 없었다(`http://jaeger:4318`은 자리표시자였다). 이를 차트에 추가해 k8s에서도 트레이스를 수집한다. 차트 `templates/jaeger.yaml`, `values.jaeger.enabled`(기본 on).
+
+- **Service 이름 = `jaeger`**: web·worker의 `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318`이 이 이름으로 해석되도록 고정 → 코드·설정 변경 0.
+- **UI(16686)는 ingress로 노출하지 않는다**: jaeger all-in-one UI는 **인증이 없어** 공개하면 누구나 트레이스(요청 메타데이터)를 본다. NetworkPolicy·보안 기조와 모순이므로 **`kubectl port-forward`로만 접근**한다.
+  ```bash
+  kubectl port-forward svc/jaeger 16687:16686 -n <ns>   # http://localhost:16687
+  ```
+- **NetworkPolicy 연동**: jaeger도 default-deny 대상이라 수신이 막힌다 → `jaeger-ingress` 정책으로 web·worker→jaeger:4318(OTLP)과 같은 ns의 UI(16686)만 허용([network.md](network.md)).
+- **한계**: all-in-one + **in-memory 저장**이라 재시작 시 트레이스 소실(데모용). prod급은 별도 백엔드(ES/Tempo) 필요 → 후속.
+- **환경 격리**: 같은 PC에서 compose와 k3s를 같이 띄워도 두 jaeger는 다른 네트워크라 트레이스가 섞이지 않는다([retrospective/dev-vs-k8s-environments.md](../retrospective/dev-vs-k8s-environments.md)).
+- **관측 스택 분리**: 실무는 관측 스택을 앱 차트와 분리(별도 차트/네임스페이스)하지만, 여기선 단순성 위해 같은 차트에 포함했다.
+
+## 6. 후속
 
 - **백엔드**: 운영에선 Grafana 스택과 일관되게 **Tempo**로 export(코드 불변, endpoint만 변경). 컨테이너화·collector 도입은 후속.
 - **auto-instrumentation 확대**: 현재 worker는 수동 span 중심. DB 드라이버·HTTP 계측을 더 붙이면 구간이 촘촘해진다.

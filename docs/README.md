@@ -112,6 +112,7 @@
 - [x] `retrospective/input-validation.md` — API 입력 검증·신뢰 경계 회고(클라 검증은 UX·서버가 게이트, 타입≠검증, source_path 무검증→worker service_role 우회 IDOR, manual vs zod, 403/400 분리)
 - [x] `retrospective/hsts-preload.md` — HSTS와 preload 회고(일반 HSTS는 헤더로 끄지만 preload는 브라우저 내장 목록이라 되돌리기 수주~수개월, 통제권이 내 손/벤더 목록인지 구분)
 - [x] `retrospective/csp-not-secret.md` — CSP는 숨김이 아니라 강제(케르크호프스: nonce는 난수라 알아도 못 뚫음). 단 기술스택 헤더(X-Powered-By)는 정보 위생으로 별도 제거
+- [x] `retrospective/dev-vs-k8s-environments.md` — docker-compose(개발) vs k8s/helm(운영) 차이, jaeger가 helm엔 자리표시자였던 이유, 한 서버에서 둘 다 돌려도 jaeger는 네트워크 격리로 안 섞임(서비스 이름은 경계 안에서만 유효)
 - [x] `security/findings-triage.md` — 스캐너 findings 28건 triage(real/FP·fix/suppress 판정·근거·사유 기록)
 - [x] `security/rate-limit.md` — rate limit 대상 선정 분석(노출도·악용·비용·기존방어 기준 → 엔드포인트 평가 → grass IP·proof-assets uid 결정, in-memory 한계·edge/Redis 후속)
 - [x] `security/public-url-exposure.md` — 공개 URL 오남용 점검(접근게이트·추측·노출범위·검증일치·소비통제 기준 → media/grass 평가·판정 → grass 토큰 검증 24 hex 하드닝)
