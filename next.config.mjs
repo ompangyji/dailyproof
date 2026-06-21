@@ -12,6 +12,10 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // 기술스택 노출 헤더 제거(X-Powered-By: Next.js). 방어가 아니라 '정보 노출 최소화' —
+  // CSP 같은 강제형 통제와 달리, 굳이 공격자에게 줄 필요 없는 힌트는 줄인다.
+  // (CSP는 숨기지 않는다 — 브라우저가 받아야 강제되므로. 근거: retrospective/csp-not-secret.md)
+  poweredByHeader: false,
   // 컨테이너용 최소 산출물(.next/standalone): 서버 실행에 필요한 파일·의존성만 추려
   // 작은 런타임 이미지를 만든다(node server.js 로 기동).
   output: "standalone",

@@ -1978,6 +1978,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - **단계 전략**: report-only로 전 기능 관찰 → 위반 0 확인 → enforce 승격. 롤백은 헤더 한 줄(데이터 무관).
 - **HSTS preload 제외**: 브라우저 내장 목록이라 롤백이 수주~수개월 → [retrospective/hsts-preload.md](retrospective/hsts-preload.md).
 - Edge 런타임이라 nonce 생성에 Buffer 대신 `btoa`. grass·정적자산은 미들웨어 matcher 제외라 CSP 미적용(정적 헤더만), grass는 SVG라 무관.
+- **정보 노출 최소화**: `poweredByHeader: false`로 `X-Powered-By: Next.js` 제거. CSP가 켜진 건 숨길 수 없고(헤더로 공개·nonce라 알아도 못 뚫음) 숨길 필요도 없지만, 기술스택 힌트는 줄 필요 없는 정보라 따로 제거. → [retrospective/csp-not-secret.md](retrospective/csp-not-secret.md).
 
 **검증**
 
