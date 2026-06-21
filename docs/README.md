@@ -114,6 +114,7 @@
 - [x] `retrospective/csp-not-secret.md` — CSP는 숨김이 아니라 강제(케르크호프스: nonce는 난수라 알아도 못 뚫음). 단 기술스택 헤더(X-Powered-By)는 정보 위생으로 별도 제거
 - [x] `retrospective/dev-vs-k8s-environments.md` — docker-compose(개발) vs k8s/helm(운영) 차이, jaeger가 helm엔 자리표시자였던 이유, 한 서버에서 둘 다 돌려도 jaeger는 네트워크 격리로 안 섞임(서비스 이름은 경계 안에서만 유효)
 - [x] `retrospective/kubectl-helm-commands.md` — 자주 쓰는 kubectl·helm 명령 치트시트(조회·배포·디버깅·port-forward + 보안 주의)
+- [x] `retrospective/k8s-service-access.md` — k8s 접근 개념(ClusterIP는 내부 전용→port-forward 터널, LoadBalancer는 외부, worker는 Service 없어 접속 대상 아님·로그로 관찰)
 - [x] `security/findings-triage.md` — 스캐너 findings 28건 triage(real/FP·fix/suppress 판정·근거·사유 기록)
 - [x] `security/rate-limit.md` — rate limit 대상 선정 분석(노출도·악용·비용·기존방어 기준 → 엔드포인트 평가 → grass IP·proof-assets uid 결정, in-memory 한계·edge/Redis 후속)
 - [x] `security/public-url-exposure.md` — 공개 URL 오남용 점검(접근게이트·추측·노출범위·검증일치·소비통제 기준 → media/grass 평가·판정 → grass 토큰 검증 24 hex 하드닝)
