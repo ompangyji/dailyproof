@@ -61,6 +61,15 @@ postSyncSmoke:
   enabled: true
   image: curlimages/curl:8.11.1
 
+# 네트워크 최소권한(default-deny + 필요한 흐름만). k3s는 NetworkPolicy를 강제(kube-router netpol).
+# 보안 기본값이라 on. 근거·한계(FQDN 제약): docs/architecture/network.md
+networkPolicy:
+  enabled: true
+  otlpPort: 4318 # 트레이스(OTLP) egress 허용 포트 — jaeger를 같은 namespace에 배포할 때 사용
+  # ingress 컨트롤러가 있는 네임스페이스(여기서 오는 트래픽만 web으로 허용). k3s Traefik은 kube-system.
+  # 비우면 모든 네임스페이스에서 web:port 허용(가장 호환적). 좁히려면 컨트롤러 ns를 지정.
+  ingressControllerNamespace: kube-system
+
 # 오토스케일. web=CPU(HorizontalPodAutoscaler, metrics-server 필요 — k3s 기본 번들),
 # worker=pending 큐 깊이(KEDA ScaledObject, KEDA 설치 필요). 켜면 해당 Deployment의 정적 replicas는 생략된다.
 autoscaling:
