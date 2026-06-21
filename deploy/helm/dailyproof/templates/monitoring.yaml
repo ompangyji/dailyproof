@@ -1,0 +1,85 @@
+{{- if .Values.monitoring.enabled }}
+# 관측 연동(kube-prometheus-stack 설치 후 켠다). ServiceMonitor로 web /metrics를 scrape하고,
+# PrometheusRule로 보안 이벤트 알림을 평가한다. CRD(ServiceMonitor·PrometheusRule)는
+# prometheus-operator가 제공하므로 스택 설치가 선결. 근거: docs/architecture/metrics.md
+#
+# 주의: kube-prometheus-stack의 Prometheus는 기본적으로 release 라벨이 자기 것과 같은
+# ServiceMonitor/PrometheusRule만 선택한다 → monitoring.prometheusRelease 라벨을 붙인다.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-web
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+    release: {{ .Values.monitoring.prometheusRelease }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "web") | nindent 6 }}
+  endpoints:
+    - port: http # web-service의 포트 이름
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-security
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+    release: {{ .Values.monitoring.prometheusRelease }}
+spec:
+  groups:
+    - name: dailyproof-security
+      rules:
+        # rate-limit 폭주: 누군가 한도를 지속적으로 때림(자동화/scraping 의심).
+        # 데모 친화 임계: 2분 내 거부 누적(increase)이 임계를 넘으면 firing. 운영에선 트래픽 보고 상향.
+        - alert: SecurityRateLimitSpike
+          expr: sum(increase(dailyproof_security_events_total{type="rate_limited"}[2m])) > 3
+          for: 30s
+          labels: { severity: warning, area: security }
+          annotations:
+            summary: "rate-limit 거부 급증"
+            description: "2분 내 rate-limit 거부 {{`{{ $value | humanize }}`}}건 — brute-force·scraping 의심."
+        # 권한 우회 시도: 타인 경로 등록 등 403 급증.
+        - alert: SecurityForbiddenSpike
+          expr: sum(increase(dailyproof_security_events_total{type="forbidden"}[2m])) > 2
+          for: 30s
+          labels: { severity: warning, area: security }
+          annotations:
+            summary: "권한 거부(403) 급증"
+            description: "source_path 소유 위반 등 권한 우회 시도 {{`{{ $value | humanize }}`}}건."
+        # 비인가 접근 급증: 로그인 없는 API 호출 폭증.
+        - alert: SecurityUnauthorizedSpike
+          expr: sum(increase(dailyproof_security_events_total{type="unauthorized"}[2m])) > 3
+          for: 30s
+          labels: { severity: warning, area: security }
+          annotations:
+            summary: "비인가 접근(401) 급증"
+            description: "인증 없는 API 호출 {{`{{ $value | humanize }}`}}건."
+{{- if .Values.networkPolicy.enabled }}
+---
+# web은 default-deny ingress라 Prometheus의 scrape도 막힌다 → monitoring 네임스페이스에서
+# web :{{ .Values.web.containerPort }} 로의 ingress를 허용한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-web-scrape
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "web") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.monitoring.namespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.web.containerPort }}
+{{- end }}
+{{- end }}

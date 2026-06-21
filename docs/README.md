@@ -116,6 +116,10 @@
 - [x] `retrospective/dev-vs-k8s-environments.md` — docker-compose(개발) vs k8s/helm(운영) 차이, jaeger가 helm엔 자리표시자였던 이유, 한 서버에서 둘 다 돌려도 jaeger는 네트워크 격리로 안 섞임(서비스 이름은 경계 안에서만 유효)
 - [x] `retrospective/kubectl-helm-commands.md` — 자주 쓰는 kubectl·helm 명령 치트시트(조회·배포·디버깅·port-forward + 보안 주의)
 - [x] `retrospective/k8s-service-access.md` — k8s 접근 개념(ClusterIP는 내부 전용→port-forward 터널, LoadBalancer는 외부, worker는 Service 없어 접속 대상 아님·로그로 관찰)
+- [x] `retrospective/wsl-node-exporter-mount.md` — WSL2에서 node-exporter CreateContainerError(루트가 private mount) → `mount --make-rshared /`로 해결, 영속성 주의·비활성화 대안
+- [x] `retrospective/stale-image-metrics.md` — Prometheus Target은 UP인데 보안 메트릭이 없던 건(배포 이미지가 계측 코드 이전). "git 머지≠클러스터 실행", 내부 curl로 /metrics 직접 확인·이미지 재빌드·k3s import 절차
+- [x] `retrospective/imperative-vs-helm-image.md` — helm upgrade가 kubectl set image로 바꾼 이미지를 되돌린 건(명령형 vs 선언형 충돌). API 직접 질의로 진단, 영속은 차트 값/git에 반영해야
+- [x] `retrospective/observability-stack-roles.md` — Prometheus(수집·룰)/Alertmanager(알림 배달)/Grafana(시각화) 역할 구분, "같은 데이터 다른 화면", pending→firing→Alertmanager 흐름
 - [x] `security/findings-triage.md` — 스캐너 findings 28건 triage(real/FP·fix/suppress 판정·근거·사유 기록)
 - [x] `security/rate-limit.md` — rate limit 대상 선정 분석(노출도·악용·비용·기존방어 기준 → 엔드포인트 평가 → grass IP·proof-assets uid 결정, in-memory 한계·edge/Redis 후속)
 - [x] `security/public-url-exposure.md` — 공개 URL 오남용 점검(접근게이트·추측·노출범위·검증일치·소비통제 기준 → media/grass 평가·판정 → grass 토큰 검증 24 hex 하드닝)
