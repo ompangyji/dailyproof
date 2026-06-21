@@ -2232,3 +2232,32 @@ kubectl run q --rm -i --image=curlimages/curl:8.11.1 -n monitoring --command -- 
 - `168-obs-alertmanager-security-alert-20260622.png` — Alertmanager에 `SecurityRateLimitSpike` 전달(필터 `alertname=…`, area/severity 라벨) — Prometheus firing→Alertmanager 배달 확인.
 
 컴포넌트 역할 구분은 회고로 분리: [retrospective/observability-stack-roles.md](retrospective/observability-stack-roles.md) — Prometheus(수집·저장·룰 평가)/Alertmanager(알림 배달)/Grafana(시각화), "같은 데이터 다른 화면", pending→firing→Alertmanager 흐름. (firing은 `for:30s` 채워야 Alertmanager로 넘어감 — 그 전까지 pending.)
+
+### 17. 보안 강화 — Kyverno admission 정책 강제
+
+**이전 상태 / 문제**
+
+- securityContext·이미지 정책을 trivy(CI)로 *배포 전*엔 검사했지만, **CI를 우회한 `kubectl apply`는 무방비**였다. 클러스터 입구에서 강제하는 계층이 없었다.
+
+**한 일 (설치 + 정책 + 거부 데모)**
+
+- **Kyverno 설치**(v1.18.1, `kyverno` ns) — admission controller가 pod 생성 요청을 정책으로 검사.
+- `deploy/kyverno/` ClusterPolicy 4개(Enforce): `require-non-root`·`require-ro-rootfs`·`require-drop-all-caps`·`disallow-latest-tag`. 시스템 ns는 `exclude`.
+- `docs/security/admission-control.md` — 정책 목록·근거·Audit→Enforce·예방/강제/탐지 계층.
+
+**핵심 설계 (정책 정립 방법론)**
+
+- **근거에서 도출**: PSS restricted(업계 표준) + threat-model의 EoP·공급망 위협. 정립 방법론은 [retrospective/policy-as-code-methodology.md](retrospective/policy-as-code-methodology.md)(위협·컴플라이언스·표준 3근거).
+- **Audit→Enforce 점진 적용**: 처음 Audit로 우리 워크로드 PASS 확인(`=()` 조건부 앵커가 위반을 못 잡던 버그 → `anyPattern` 필수 조건으로 수정) 후 Enforce 승격. (CSP report-only→enforce와 같은 패턴.)
+- **예방·강제·탐지 겹침**: trivy(CI 예방) + Kyverno(admission 강제) + Prometheus(런타임 탐지).
+
+**검증 (실측)**
+
+- 정책 4개 Ready. 우리 워크로드(web·worker·jaeger·smoke)는 securityContext·고정 태그를 이미 갖춰 **전부 PASS**.
+- 위반 pod 거부 확인: `nginx:latest`→`disallow-latest-tag`, root/rwfs pod→`require-non-root`/`require-drop-all-caps`가 `admission webhook denied`로 차단.
+
+**자료**
+
+- `169-sec-kyverno-policy-pass-20260622.png` — 정책 적용 + policyreport에 우리 워크로드 PASS.
+- `170-sec-kyverno-deny-root-20260622.png` — root pod가 `require-non-root`로 admission 거부.
+- `171-sec-kyverno-policyset-deny-20260622.png` — 정책 4개 + `:latest`·root/rwfs 위반 거부(정책 세트 강제).
