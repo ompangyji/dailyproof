@@ -1983,6 +1983,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
   - **1차 시도(가설 → 실패)**: "nonce CSP는 요청별 동적 렌더가 전제인데 e2e가 `next start` + `output: standalone`(Next가 비호환 경고)으로 기동해 동적 렌더가 깨진 것"으로 보고, `output: standalone`을 `BUILD_STANDALONE=1`(Docker)일 때만 켜도록 조건화. → **CI 재실행도 동일 실패.** standalone을 꺼도 안 고쳐졌으므로 오진.
   - **2차(진짜 원인 → 해결)**: 실제 원인은 **root layout이 `headers()`를 안 읽어 페이지가 정적 prerender**된 것. 정적이면 빌드 타임 스크립트에 nonce가 없는데 응답 헤더엔 요청별 nonce → `strict-dynamic`이 그 스크립트를 통째로 차단 → 하이드레이션 실패. **해결: root layout을 async로 만들어 `await headers()`로 nonce를 읽어 앱 전체를 동적 렌더로 전환** → Next가 각 요청 nonce를 스크립트에 부여 → CSP 일치. (Next 공식 CSP 패턴의 빠졌던 조각.)
   - **교훈**: Vercel **A+는 헤더 *존재*만 스캔**한 거라 JS가 CSP에 막혀 깨진 것까지는 못 잡는다 — "등급 통과 ≠ 기능 정상". 그리고 첫 진단(standalone)에 매달리지 말고 *고쳐지는지*로 가설을 검증해야 했다. (standalone 조건화 자체는 `next start` 비호환 정리로 남겨둠.)
+- **후속 CSP 위반 1건(font-src)**: 배포 후 FullCalendar 아이콘 폰트(`fcicons`, base64 **`data:` URI** `@font-face`)가 `font-src 'self'`에 막혀 `Refused…blocked`(아이콘 깨짐). report-only 관찰 때 해당 화면(캘린더)을 안 거쳐 놓침 → **`font-src 'self' data:`** 로 보강. 교훈: report-only 관찰은 **전 화면을 실제로 거쳐야** 누락이 없다(next/font는 self-host라 무관했지만 서드파티 data: 폰트는 별개 케이스).
 - Edge 런타임이라 nonce 생성에 Buffer 대신 `btoa`. grass·정적자산은 미들웨어 matcher 제외라 CSP 미적용(정적 헤더만), grass는 SVG라 무관.
 - **정보 노출 최소화**: `poweredByHeader: false`로 `X-Powered-By: Next.js` 제거. CSP가 켜진 건 숨길 수 없고(헤더로 공개·nonce라 알아도 못 뚫음) 숨길 필요도 없지만, 기술스택 힌트는 줄 필요 없는 정보라 따로 제거. → [retrospective/csp-not-secret.md](retrospective/csp-not-secret.md).
 
