@@ -1904,6 +1904,8 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 
 - `150-sec-ratelimit-proofassets-start-20260620.png` — 반복 호출 시작(한도 이하, 통과).
 - `151-sec-ratelimit-proofassets-429-20260620.png` — 30번째부터 `429 Too Many Requests`(uid 한도 작동).
+- `157-sec-ratelimit-grass-start-20260620.png` — grass 65회 반복 호출 스니펫(IP 한도 테스트).
+- `158-sec-ratelimit-grass-429-20260620.png` — 결과 `{404: 60, 429: 5}` — IP 60/분 한도 후 429(grass 한도 작동).
 
 ### 5. 보안 기본기 — 공개 URL 오남용 점검 + grass 토큰 검증 하드닝
 
@@ -1977,6 +1979,7 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 - **nonce 적용 메커니즘**: 미들웨어가 요청 헤더에 enforcing 이름으로 CSP를 실어 Next가 nonce를 추출해 자기 `<script>`에 부여 → 응답은 처음엔 report-only로만 내보내 차단 없이 관찰.
 - **단계 전략**: report-only로 전 기능 관찰 → 위반 0 확인 → enforce 승격. 롤백은 헤더 한 줄(데이터 무관).
 - **HSTS preload 제외**: 브라우저 내장 목록이라 롤백이 수주~수개월 → [retrospective/hsts-preload.md](retrospective/hsts-preload.md).
+- **CI e2e 깨짐 → standalone 조건화**: enforce 후 CI e2e가 로그인 폼 미렌더로 실패. 원인은 nonce CSP가 *요청별 동적 렌더*를 전제하는데, e2e가 `next start` + `output: standalone`(비호환 조합 — Next가 경고)으로 기동해 동적 렌더가 깨져 스크립트 nonce가 응답 헤더 nonce와 불일치 → CSP가 하이드레이션 스크립트 차단 → `useSearchParams`+Suspense 폼이 영영 안 그려짐(헤딩은 Suspense 밖이라 보임). Vercel은 nonce 감지 시 자동 동적 렌더라 정상(배포본 A+·기능 정상)이었고 CI만 노출. 해결: `output: standalone`을 `BUILD_STANDALONE=1`(Docker 빌드)일 때만 켜고, e2e·일반 빌드는 표준 출력 → `next start` 정상 → nonce 일치.
 - Edge 런타임이라 nonce 생성에 Buffer 대신 `btoa`. grass·정적자산은 미들웨어 matcher 제외라 CSP 미적용(정적 헤더만), grass는 SVG라 무관.
 - **정보 노출 최소화**: `poweredByHeader: false`로 `X-Powered-By: Next.js` 제거. CSP가 켜진 건 숨길 수 없고(헤더로 공개·nonce라 알아도 못 뚫음) 숨길 필요도 없지만, 기술스택 힌트는 줄 필요 없는 정보라 따로 제거. → [retrospective/csp-not-secret.md](retrospective/csp-not-secret.md).
 

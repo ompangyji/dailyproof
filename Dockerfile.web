@@ -21,6 +21,8 @@ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_TELEMETRY_DISABLED=1
+# 컨테이너 런타임은 .next/standalone(server.js)으로 기동하므로 이 빌드에서만 standalone을 켠다.
+ENV BUILD_STANDALONE=1
 RUN npm run build
 
 # --- runner: standalone 산출물만 ---
