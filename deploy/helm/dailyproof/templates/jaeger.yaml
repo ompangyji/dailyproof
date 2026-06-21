@@ -1,0 +1,84 @@
+{{- if .Values.jaeger.enabled }}
+# 관측: 트레이스 수집(jaeger all-in-one). web·worker가 OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+# 로 보내므로 Service 이름을 'jaeger'로 고정해 코드·설정 변경 없이 연결한다.
+#
+# 보안: all-in-one UI(16686)는 인증이 없어 ingress로 공개하지 않는다 → kubectl port-forward로 접근.
+# 저장은 in-memory라 재시작 시 트레이스 소실(데모용). prod급은 별도 백엔드(ES 등) 필요 → [추후].
+# 실무에선 관측 스택을 앱 차트와 분리(별도 차트/네임스페이스)하지만, 여기선 단순성 위해 같은 차트에 포함.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-jaeger
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "jaeger") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "jaeger") | nindent 8 }}
+    spec:
+      containers:
+        - name: jaeger
+          image: {{ .Values.jaeger.image }}
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true" # OTLP 수신(4318/HTTP, 4317/gRPC) 활성화
+          ports:
+            - { name: ui, containerPort: 16686 }
+            - { name: otlp-http, containerPort: 4318 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 250m, memory: 512Mi }
+---
+# Service 이름 'jaeger' — web/worker의 OTLP 엔드포인트(http://jaeger:4318)가 이 이름으로 해석된다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+spec:
+  selector:
+    {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "jaeger") | nindent 4 }}
+  ports:
+    - { name: ui, port: 16686, targetPort: 16686 }
+    - { name: otlp-http, port: 4318, targetPort: 4318 }
+{{- if .Values.networkPolicy.enabled }}
+---
+# NetworkPolicy: jaeger는 default-deny 대상이라 수신이 막힌다. web·worker가 OTLP(4318)로 보내는 것과
+# 같은 namespace에서 UI(16686, port-forward 경유)를 허용한다. (app-egress가 보내는 쪽, 이건 받는 쪽)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "dailyproof.fullname" . }}-jaeger-ingress
+  labels:
+    {{- include "dailyproof.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "dailyproof.selectorLabels" (dict "Chart" .Chart "Release" .Release "component" "jaeger") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # OTLP 수신: 같은 릴리스의 web·worker에서만.
+    - from:
+        - podSelector:
+            matchExpressions:
+              - { key: app.kubernetes.io/name, operator: In, values: ["{{ .Chart.Name }}"] }
+              - { key: app.kubernetes.io/instance, operator: In, values: ["{{ .Release.Name }}"] }
+              - { key: app.kubernetes.io/component, operator: In, values: ["web", "worker"] }
+      ports:
+        - { protocol: TCP, port: 4318 }
+    # UI: 같은 namespace 내부에서(주로 kubectl port-forward는 정책을 우회하지만 명시적으로 허용).
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - { protocol: TCP, port: 16686 }
+{{- end }}
+{{- end }}

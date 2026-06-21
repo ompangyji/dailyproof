@@ -61,6 +61,12 @@ postSyncSmoke:
   enabled: true
   image: curlimages/curl:8.11.1
 
+# 관측: 트레이스 수집(jaeger all-in-one). web·worker가 http://jaeger:4318 로 보내므로 Service명=jaeger.
+# UI(16686)는 인증 없어 ingress 미노출 → port-forward로 접근. 저장 in-memory(데모). 근거: architecture/tracing.md
+jaeger:
+  enabled: true
+  image: jaegertracing/all-in-one:1.62.0 # :latest는 EOL 경고 → 버전 고정(재현성)
+
 # 네트워크 최소권한(default-deny + 필요한 흐름만). k3s는 NetworkPolicy를 강제(kube-router netpol).
 # 보안 기본값이라 on. 근거·한계(FQDN 제약): docs/architecture/network.md
 networkPolicy:

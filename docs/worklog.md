@@ -2052,3 +2052,24 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **검증**
 
 - `helm template`로 on(정책 4개: default-deny·allow-dns·web-ingress·app-egress)·off(0개) 렌더 확인. 런타임(차단 timeout/허용 성공) 검증은 k3s 적용 시.
+
+### 10. 관측 — jaeger k8s 배포 (트레이스 수집)
+
+**이전 상태 / 문제**
+
+- jaeger가 docker-compose(로컬)에만 있고 helm/k8s 차트엔 없어, k8s 배포 환경에선 트레이스 수신처가 없었다(`OTEL…=http://jaeger:4318`은 자리표시자). 로컬은 트레이스 보이는데 운영 환경은 비대칭.
+
+**한 일**
+
+- `templates/jaeger.yaml`(신규) — jaeger all-in-one Deployment + **Service명 `jaeger`**(web·worker의 `http://jaeger:4318`이 그대로 해석 → 코드·설정 변경 0) + jaeger-ingress NetworkPolicy. `values.jaeger.enabled`(기본 on), 이미지 버전 고정(`1.62.0`).
+- `architecture/tracing.md`에 "5. k8s 배포(jaeger)" 섹션.
+
+**핵심 설계**
+
+- **UI(16686) ingress 미노출**: all-in-one UI는 인증이 없어 공개 시 트레이스 노출 → NetworkPolicy 기조와 모순이라 **port-forward로만 접근**.
+- **NetworkPolicy 연동**: jaeger도 default-deny 대상 → `jaeger-ingress`로 web·worker→:4318(OTLP)·같은 ns UI:16686만 허용. `#60`의 app-egress(보내는 쪽)와 짝.
+- **한계**: in-memory 저장(재시작 시 소실, 데모용), prod급은 ES/Tempo 후속. 관측 스택은 실무상 앱 차트와 분리하지만 여기선 단순성 위해 포함(정직한 프레이밍).
+
+**검증**
+
+- helm 렌더(jaeger on: Deployment+Service `jaeger`+jaeger-ingress / off: 0)·lint 통과. 런타임(클러스터 배포 후 port-forward로 트레이스 수집 UI) 검증 예정.
