@@ -2140,3 +2140,23 @@ DailyProof DevOps 포트폴리오 작업의 진행 기록.
 **검증**
 
 - TOML 파싱 OK + allowlist 정규식이 봉인 파일과 매치 확인(로컬). 실스캔은 CI에서. (교훈: 보안 도구도 컨텍스트를 모르면 오탐한다 — 의도된 암호문 산출물은 근거와 함께 좁게 allowlist.)
+
+### 14. 보안 강화 — 위협 모델 (STRIDE)
+
+**이전 상태 / 문제**
+
+- 개별 통제(RLS·CSP·rate limit·sealed-secrets·NetworkPolicy 등)는 갖췄지만, "위협을 체계적으로 보고 대응했나"를 한눈에 보여줄 위협 관점 정리가 없었다.
+
+**한 일**
+
+- `docs/security/threat-model.md` — 신뢰 경계(TB1~4)·자산·진입점·위협 행위자 식별 후 **STRIDE 6범주별 표**(위협×완화책×잔여위험×위험등급). 가정·범위 밖도 명시.
+
+**핵심 설계 (구성 보강)**
+
+- 표준 STRIDE에서 흔히 빠지는 **자산 목록·공격 표면·위협 행위자·위험 등급·가정/범위밖**까지 포함.
+- 기존 통제를 STRIDE에 매핑: S→Auth·쿠키, T→RLS·zod·CSP, R→admin_audit·트레이싱, I→RLS·sealed-secrets·HSTS, D→rate limit·HPA, E→다층 인가·source_path 검증·securityContext·NetworkPolicy.
+- **정직한 프레이밍**: 통제를 먼저 한 뒤 사후 정리. 위험 등급은 포트폴리오 규모 정성 평가.
+
+**검증**
+
+- 새 코드 없음(문서). 잔여 위험에 service_role 회전(#55)·분산 rate limit·FQDN 정책 등 명시.
