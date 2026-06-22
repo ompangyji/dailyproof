@@ -106,11 +106,20 @@ select status, count(*) from jobs group by status;  -- queue_depth
 
 - 구조화 JSON 로그(stdout/stderr): `request_id`·`worker_id`·`job_id`·`error_code`·`status`.
 - 주요 로그 메시지: `worker 시작` / `job 선점` / `job 완료` / `job 실패 — 재시도 예약` / `job 실패 — 최대 재시도 초과, failed 확정` / `claim_job 실패` / `readiness check`.
-- [추후] Prometheus 메트릭(`queue_depth` 등) + Grafana 대시보드 + Loki 로그 집계.
+- **Prometheus 메트릭**(web `/metrics`): 큐 상태는 `dailyproof_jobs_total{status=...}`(pending = queue depth), 보안 이벤트는 `dailyproof_security_events_total{type=rate_limited|forbidden|unauthorized}`. 메트릭 목록·질의는 `../architecture/metrics.md`, 알림 규칙은 차트 `monitoring.yaml`(PrometheusRule).
+- **분산 트레이스**(Jaeger): 업로드 한 건이 web→큐→worker→DB로 흐른 span 트리를 본다. UI(16686)는 미노출이라 `kubectl port-forward`로 접근 — 상세는 `../architecture/tracing.md`.
+- [추후] Grafana 대시보드 + Loki 로그 집계.
 
 ---
 
-## 9. 로컬 빌드 주의 (WSL drvfs)
+## 9. admission control / 시크릿 운영
+
+- **Kyverno admission(위반 pod 거부)**: 클러스터 입구에서 보안 기준(비루트·RO rootfs·drop-all-caps·non-`latest` 태그)을 Enforce한다. 위반 워크로드는 `kubectl apply` 시점에 admission이 **거부**해 아예 안 뜬다 — "배포가 막혔다"는 증상이 정책 위반일 수 있다(에러 메시지에 위반 정책명이 찍힘). 정책 목록·예외(시스템 ns 제외)·설치는 `../security/admission-control.md`.
+- **sealed-secrets(시크릿 봉인·복호화)**: 시크릿은 평문이 아니라 암호화된 SealedSecret으로 커밋(`deploy/sealed-secrets/`)되고, 클러스터의 controller가 런타임에 복호화해 Secret을 만든다. 값 교체(예: service_role 키 rotation)는 새로 봉인해 커밋하는 절차로 한다 — `secret-management.md`.
+
+---
+
+## 10. 로컬 빌드 주의 (WSL drvfs)
 
 - 윈도우 마운트 경로(`/mnt/d/...`, drvfs)에서 `npm run build`(프로덕션 빌드)는 마지막 단계의 `copyfile`(`_not-found.html`→`pages/404.html`)에서 **`EPERM`** 로 중단된다. drvfs 권한 제약(git chmod 막히는 것과 같은 계열)으로, **리눅스 fs에선 안 난다.**
 - 실제 영향 범위: **없음**. Docker 빌드(컨테이너 내부 리눅스 fs)·Vercel 배포·CI(리눅스 러너)·`npm run dev`·`npm test`는 모두 정상. 의미 있는 단계(컴파일·타입·lint·static)는 EPERM 이전에 끝나며, 동일 소스를 네이티브 fs에서 빌드하면 `exit 0`로 완주한다.
@@ -118,7 +127,7 @@ select status, count(*) from jobs group by status;  -- queue_depth
 
 ---
 
-## 10. 참고 문서
+## 11. 참고 문서
 
 - `architecture/worker.md` — 상태 전이·동작 상세
 - `architecture/environments.md` — 환경·시크릿 주입

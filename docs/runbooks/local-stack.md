@@ -79,6 +79,7 @@ npm run smoke
 ## 6. 후속
 
 - **jaeger 이미지 고정**: 현재 `:latest`(v1)는 EOL deprecation 경고가 뜬다. 재현성을 위해 특정 버전 태그로 고정하거나 Jaeger v2로 전환한다(OTLP 4318·UI 16686은 동일, 코드 불변).
+  - compose는 still `:latest`, k8s 차트(`deploy/helm/dailyproof/values.yaml`)는 `1.62.0`으로 고정돼 있음 — 재현성을 위해 compose도 같은 버전으로 고정 권장([추후]).
 - **관측 스택 통합**: Prometheus(`/metrics` scrape)·Grafana·Loki를 compose에 추가해 메트릭·로그·trace를 한 대시보드로([추후]).
 - **헬스 게이트**: compose `depends_on`에 healthcheck 조건을 걸어 web ready 후 트래픽 흐르게([추후]).
 

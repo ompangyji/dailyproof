@@ -22,6 +22,12 @@ deploy/helm/dailyproof/
     worker-deployment.yaml    # worker Deployment
     configmap.yaml            # 비밀 아닌 설정
     secret.yaml               # 시크릿(빈 placeholder, 실값은 주입)
+    networkpolicy.yaml        # default-deny + 필요한 흐름만 (networkPolicy.enabled, 기본 true)
+    web-hpa.yaml              # web CPU 오토스케일 HPA (autoscaling.web.enabled, 기본 false)
+    worker-scaledobject.yaml  # worker pending 큐 깊이 스케일 KEDA ScaledObject (autoscaling.worker.enabled, 기본 false)
+    jaeger.yaml               # 트레이스 수집 jaeger all-in-one (jaeger.enabled, 기본 true)
+    monitoring.yaml           # ServiceMonitor + 보안 알림 PrometheusRule (monitoring.enabled, 기본 false)
+    postsync-smoke-job.yaml   # ArgoCD PostSync hook smoke (postSyncSmoke.enabled, 기본 true)
 ```
 
 | 리소스 | 설명 |
@@ -31,6 +37,14 @@ deploy/helm/dailyproof/
 | worker Deployment | 큐 소비 프로세스(HTTP 미개방 → httpGet probe 없음) |
 | ConfigMap | `APP_ENV`·`LOG_LEVEL`·`OTEL_*`·`WORKER_*`·공개 `NEXT_PUBLIC_*` |
 | Secret | `SUPABASE_SERVICE_ROLE_KEY`(worker만 참조) |
+| NetworkPolicy | default-deny + allow-dns + web-ingress + app-egress (`networkPolicy.enabled`, 기본 on) |
+| web HPA | CPU 기준 HorizontalPodAutoscaler (`autoscaling.web.enabled`, 기본 off — metrics-server 필요) |
+| worker ScaledObject | pending 큐 깊이 기준 KEDA 스케일 (`autoscaling.worker.enabled`, 기본 off — KEDA 필요) |
+| jaeger | all-in-one Deployment+Service, OTLP `http://jaeger:4318` 수신, 저장 in-memory (`jaeger.enabled`, 기본 on) |
+| ServiceMonitor + PrometheusRule | web `/metrics` scrape + 보안 알림 3개 (`monitoring.enabled`, 기본 off — kube-prometheus-stack CRD 필요) |
+| PostSync smoke Job | ArgoCD PostSync hook, `/health`·`/metrics` 검증 (`postSyncSmoke.enabled`, 기본 on) |
+
+> 보안/확장/관측 매니페스트는 토글로 분리돼 있다(CRD·외부 컴포넌트 의존이 있는 것은 기본 off). 동작 원리·전제·한계는 각 전문 문서로 링크아웃한다(§6).
 
 ---
 
@@ -114,7 +128,20 @@ kubectl get pods -n dailyproof
 
 > ⚠️ web 이미지의 `NEXT_PUBLIC_*`(URL·anon 키)는 **빌드 시점에 번들에 박힌다.** 이 값을 바꾸려면 `docker tag`만으론 안 되고 `docker build --build-arg NEXT_PUBLIC_...`로 **재빌드**한 뒤 import해야 한다(자세한 함정은 `argocd.md` §5 트러블슈팅).
 
-## 6. 후속
+## 6. 보안·확장·관측·admission (상세는 전문 문서로)
+
+위 매니페스트들의 설계 의도·전제·운영은 차트에 인라인 주석으로, 깊은 설명은 전용 문서로 둔다. 여기선 "어디에 있고 무엇을 보면 되는지"만:
+
+- **NetworkPolicy** — default-deny 위에 필요한 흐름(dns·web ingress·app egress)만 연다. 설계·FQDN 한계: `../architecture/network.md`.
+- **오토스케일(HPA/KEDA)** — web=CPU HPA, worker=pending 큐 깊이(KEDA). 켜면 해당 Deployment의 정적 replicas는 생략된다. 근거(부하 측정·임계값): `../architecture/scaling.md`.
+- **트레이스 수집(jaeger)** — web·worker가 `http://jaeger:4318`(OTLP)로 보낸다. UI(16686)는 인증이 없어 ingress 미노출 → `kubectl port-forward`로 접근: `../architecture/tracing.md`.
+- **메트릭(monitoring)** — ServiceMonitor가 web `/metrics`를 scrape, PrometheusRule이 보안 이벤트 알림 3개. kube-prometheus-stack CRD가 필요해 기본 off: `../architecture/metrics.md`.
+- **admission control(Kyverno)** — 차트가 아니라 별도 디렉토리 `deploy/kyverno/`에 ClusterPolicy 4개(비루트·RO rootfs·drop-all-caps·disallow-latest, Enforce). helm(`kyverno/kyverno`)으로 설치: `../security/admission-control.md`.
+- **시크릿 봉인(sealed-secrets)** — 암호화한 SealedSecret을 `deploy/sealed-secrets/`에 커밋(평문 미커밋). 봉인·복호화 절차: `secret-management.md`.
+
+---
+
+## 7. 후속
 
 - **이미지 레지스트리**: 지금은 로컬 import. CI에서 빌드→레지스트리 push→태그 참조로 전환([추후]).
 - **Ingress**: web Service는 ClusterIP. 외부 노출은 Ingress(k3s Traefik) 또는 NodePort로([추후], 배포 단계).

@@ -7,6 +7,14 @@ DailyProof의 **현재 상태**(`architecture/current-state.md`)와 포트폴리
 
 분석 기준일: 2026-06-09
 
+> **구현 완료 노트 (2026-06-22 기준)** — 아래 gap 분석은 작성 시점(2026-06-09)의 스냅샷이며, 이후 다수 항목이 실제 구현으로 채워졌다. 원문은 당시 의사결정 기록으로 보존한다.
+> - **보안 다층**: 입력 검증(zod) · CSP · rate limit · sealed-secrets · NetworkPolicy(default-deny) · Kyverno admission control · 보안 스캐닝(trivy·gitleaks·CodeQL)
+> - **관측**: jaeger(k8s 배포) · kube-prometheus-stack · 보안 이벤트 알림
+> - **운영**: scaling(HPA/KEDA) · cost · backup-recovery drill
+> - **CI/CD**: GitHub Actions · self-hosted Jenkins · Terraform(IaC)
+>
+> 최신 전체 상태는 `architecture/target-architecture.md` §9와 `worklog.md`를 참조.
+
 ---
 
 ## 1. 요약 (한눈에)

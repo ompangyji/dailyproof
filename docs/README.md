@@ -130,5 +130,6 @@
 - [x] `security/admission-control.md` — Kyverno 정책 강제(non-root·ro-rootfs·drop ALL·latest 금지), 예방(trivy)·강제(admission)·탐지 계층, Audit→Enforce·scope 예외, 위반 거부 실측
 - [x] `security/security-headers-plan.md` — Security headers 도입 계획(6헤더 값·CSP 디렉티브 충돌원 설계·nonce 방식·report-only→enforce 단계·롤백·검증)
 - [x] `security/cookie-csrf.md` — 쿠키·CSRF 점검(탈취/CSRF/인가/Origin/메서드 기준 → Supabase 쿠키·server action·signout 평가·판정 → serverActions.allowedOrigins 하드닝)
+- [x] `../SECURITY.md` (repo 루트) — 취약점 신고 정책(지원 범위·신고 채널·공개 절차)
 - [x] `incidents/incident-log.md` — 장애 등록부(실제 겪은 장애 5건 통일 포맷 요약·색인: 빈 build-arg readiness 503·ImagePullBackOff·/metrics 부하 행·CI 플레이크·PostSync hook 막힘. 상세는 회고·runbook으로 링크아웃)
 - [x] `performance/performance.md` — 성능 베이스라인(k6, 조회+DB vs 순수앱 대비·threshold·병목 가설)

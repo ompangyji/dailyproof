@@ -96,7 +96,7 @@ DailyProof를 위협 관점으로 분해해, 자산·신뢰 경계·진입점을
 |---|---|---|
 | 일반 사용자가 admin 기능 | **다층 인가**: 페이지 404 게이트 + admin RPC 내부 `is_admin()` 재검증 | 낮음 |
 | 타인 경로 등록 → worker가 RLS 우회 처리(IDOR성) | API guard **source_path 소유 검증(403)** | 낮음 |
-| 컨테이너 침해 후 권한 상승·확산 | **securityContext**(non-root·readOnly·drop ALL·seccomp), **NetworkPolicy** default-deny | 중간 |
+| 컨테이너 침해 후 권한 상승·확산 | **securityContext**(non-root·readOnly·drop ALL·seccomp), **NetworkPolicy** default-deny, **Kyverno admission**으로 securityContext·태그 정책 강제(우회 배포 차단) | 중간 |
 
 ## 6. 잔여 위험 · 후속
 
@@ -112,4 +112,4 @@ DailyProof를 위협 관점으로 분해해, 자산·신뢰 경계·진입점을
 - **범위 밖**: 물리 접근, 운영자 단말 탈취, 소셜 엔지니어링, 서드파티 서비스 내부 취약점, DDoS(L3/4, CDN/클라우드 영역).
 - 위험 등급은 트래픽이 거의 없는 포트폴리오 환경 가정의 정성 평가다.
 
-참고: 통제 점검표 [security/checklist.md](checklist.md), 신고 정책 [/SECURITY.md](../../SECURITY.md), 개별 통제는 rate-limit·public-url-exposure·cookie-csrf·security-headers-plan·secret-management.
+참고: 통제 점검표 [security/checklist.md](checklist.md), 신고 정책 [/SECURITY.md](../../SECURITY.md), admission 정책 [admission-control.md](admission-control.md), 개별 통제는 rate-limit·public-url-exposure·cookie-csrf·security-headers-plan·secret-management.
