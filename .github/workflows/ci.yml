@@ -69,7 +69,7 @@ jobs:
           helm lint deploy/helm/dailyproof
           helm template dp deploy/helm/dailyproof -f deploy/helm/dailyproof/values-staging.yaml > /dev/null
           helm template dp deploy/helm/dailyproof -f deploy/helm/dailyproof/values-prod.yaml > /dev/null
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false
       - name: Terraform fmt + validate
