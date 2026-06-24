@@ -1,6 +1,6 @@
 # 작업 일지 (Worklog)
 
-DailyProof DevOps 포트폴리오 작업의 진행 기록.
+DailyProof 운영 확장 작업의 진행 기록.
 구조: **날짜(하루) → task(큰 제목, 순서 번호) → 작업한 일(내용)**.
 관련 스크린샷은 `docs/screenshots/`에 전역 순번(`NNN-...`)으로 보관한다(git 미추적).
 
