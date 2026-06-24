@@ -42,8 +42,23 @@ backup*.sql
 /favicon.png
 /favicon.zip
 
-# docs screenshots (kept locally, not committed)
-/docs/screenshots/
+# docs screenshots: 기본은 로컬 보관(미추적), 단 README가 참조하는 것만 커밋해 GitHub에서 렌더.
+/docs/screenshots/*
+!/docs/screenshots/home.png
+!/docs/screenshots/flow.svg
+!/docs/screenshots/082-trace-otel-web-worker-tree-20260616.png
+!/docs/screenshots/104-deploy-argocd-healthy-tree-20260617.png
+!/docs/screenshots/139-admin-ops-deadletter-before-20260620.png
+!/docs/screenshots/149-sec-proofassets-zod-403-foreign-20260620.png
+!/docs/screenshots/151-sec-ratelimit-proofassets-429-20260620.png
+!/docs/screenshots/152-sec-bucket-config-mime-size-20260621.png
+!/docs/screenshots/155-sec-securityheaders-before-D-20260621.png
+!/docs/screenshots/156-sec-securityheaders-after-Aplus-20260621.png
+!/docs/screenshots/159-sec-sealedsecret-seal-decrypt-20260621.png
+!/docs/screenshots/166-obs-alert-firing-20260622.png
+!/docs/screenshots/167-obs-grafana-security-metric-20260622.png
+!/docs/screenshots/168-obs-alertmanager-security-alert-20260622.png
+!/docs/screenshots/171-sec-kyverno-policyset-deny-20260622.png
 
 # vercel
 .vercel
