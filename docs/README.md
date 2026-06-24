@@ -1,6 +1,6 @@
-# DailyProof DevOps 포트폴리오 문서
+# DailyProof 운영 확장 문서
 
-이 디렉토리는 DailyProof를 운영형 서비스 / DevOps 포트폴리오로 확장하는 과정의 **모든 산출물의 source of truth**다.
+이 디렉토리는 DailyProof를 운영형 서비스로 확장하는 과정의 **모든 산출물의 source of truth**다.
 
 - 운영 문서, 아키텍처 다이어그램, 스크린샷, 테스트 결과, 배포 설정의 원본은 이 repo 안 `docs/`에 둔다.
 - Notion은 문서 작성 원본이 아니라 공유/정리 채널로만 사용한다.
