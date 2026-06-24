@@ -17,6 +17,8 @@
 | **공개 URL 오남용** | media 세션 인가(매 요청 RLS) · grass 토큰 96비트·검증 24 hex·집계만 노출 | ✅ | [public-url-exposure](public-url-exposure.md) |
 | **스캐닝/공급망** | trivy·gitleaks·CodeQL·Dependabot·SBOM, hard gate(CI) | ✅ | [findings-triage](findings-triage.md) · [retro](../retrospective/security-scanning.md) |
 | **런타임 하드닝** | readOnlyRootFilesystem·seccomp·non-root·drop ALL caps(컨테이너/k8s) | ✅ | securityContext |
+| **보안 이벤트 모니터링** | 보안 거부(401/403/429) 메트릭+알림 | ✅ | `src/lib/security-events.ts`·`monitoring.yaml` |
+| **admission control(Kyverno)** | securityContext·태그 정책을 admission에서 강제 | ✅ | `deploy/kyverno/` (상세 [admission-control](admission-control.md)) |
 
 ## 항목별 메모 (무엇을·어디서)
 
@@ -31,4 +33,3 @@
 - **grass 토큰 rotate** — 명시적 회전 기능 부재, 현재는 `enabled=false`/재생성으로 무효화.
 - **분산 rate limit** — 현재 in-memory(per-pod·재시작 초기화) → 다중 pod 환경에선 edge(Traefik)/Redis로 전환 필요.
 - **egress 보호** — media 대량 다운로드는 CDN 단계 과제([cost](../architecture/cost.md)·[scaling](../architecture/scaling.md)).
-- **추가 하드닝(후속 task)**: security headers(CSP/HSTS), cookie/CSRF 점검, NetworkPolicy, 시크릿 관리 업그레이드, threat model(STRIDE), 보안 이벤트 모니터링.

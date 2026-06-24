@@ -48,11 +48,11 @@ export async function updateSession(request: NextRequest) {
     headers.set(REQUEST_ID_HEADER, requestId);
     headers.set("x-nonce", nonce);
     // 요청 헤더에 enforcing 이름으로 실어 Next가 nonce를 추출해 자기 <script>에 부여하게 한다.
-    // (응답은 아래에서 Report-Only로만 내보내므로 브라우저는 차단하지 않고 보고만 한다.)
+    // (응답은 아래에서 enforce(Content-Security-Policy)로 내보내 브라우저가 실제로 차단한다.)
     headers.set("Content-Security-Policy", csp);
     const res = NextResponse.next({ request: { headers } });
     res.headers.set(REQUEST_ID_HEADER, requestId);
-    // report-only로 전 기능 관찰해 위반 0 확인 후 enforce로 승격(차단 활성화).
+    // 과거 report-only로 전 기능 관찰해 위반 0 확인 후 enforce로 승격(현재 차단 활성화).
     res.headers.set("Content-Security-Policy", csp);
     return res;
   };

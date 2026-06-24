@@ -5,6 +5,8 @@ Gap 분석에서 ✅직접/🔶혼합으로 분류한 항목을 하나의 운영
 
 기준일: 2026-06-09 · 전제: 로컬(WSL2) 직접 구현, AWS는 [추후] 문서 매핑
 
+> 📌 이 문서는 **착수 시점(06-09)의 목표 설계**다. 2주 구현을 마친 **실제 결과와 계획 대비 변경점**은 아래 **[§9 구현 결과](#9-구현-결과-계획-대비)** 에 정리했다(목표는 그대로 두고 결과를 덧붙임).
+
 ---
 
 ## 1. 한 줄 정의
@@ -165,7 +167,82 @@ stateless 컨테이너·외부 시크릿 주입·object storage 분리를 유지
 
 ---
 
-## 8. 다음 작업
+## 8. 다음 작업 (착수 시점 기준)
 
 - `architecture/environments.md` — dev/staging/prod 환경 분리 전략
 - `proof_assets`/`jobs` DB 스키마 초안
+
+---
+
+## 9. 구현 결과 (계획 대비)
+
+착수 시점(§1~8)의 목표 대비, 2주 구현으로 **실제 무엇이 만들어졌고 어디가 달라졌는지** 정리한다. (검증 기준일 2026-06-22)
+
+### 9.1 실제 배포 토폴로지
+
+핵심 변경: web과 worker가 **다른 환경에 분리 배포**된다. web은 서버리스(Vercel), worker는 상주 폴링이라 k3s. (근거: `environments.md`, `README.md`)
+
+```mermaid
+flowchart TB
+    user([사용자]) -->|HTTPS| web[web · Next.js<br/>Vercel 서버리스]
+    web -->|REST·Auth| supa[(Supabase<br/>Postgres·Storage·Auth)]
+    web -.->|업로드 직행| supa
+
+    subgraph k3s[k3s 클러스터]
+        worker[worker · 폴링]
+        jaeger[Jaeger]
+        promstack[kube-prometheus-stack<br/>Prometheus·Alertmanager·Grafana]
+        kyverno[Kyverno admission]
+    end
+    worker -->|claim/process| supa
+    worker -.->|trace OTLP| jaeger
+    web -.->|/metrics| promstack
+    worker -.->|/metrics| promstack
+
+    argo[ArgoCD] -->|pull sync| k3s
+    tf[Terraform] -->|push apply| k3s
+    gha[GitHub Actions] --> argo
+    jenkins[Jenkins · 미러 CI] -.-> k3s
+```
+
+- **web = Vercel**(또는 k3s), **worker = k3s**. Vercel 단독 시 업로드는 되지만 후처리(worker)는 미동작 — 의도된 분리(`environments.md` §3.1).
+- k3s 차트(`deploy/helm/dailyproof/templates/`)에 web·worker 외에 jaeger·monitoring·networkpolicy·postsync-smoke 등 13개 매니페스트, 대부분 `*.enabled` 토글.
+
+### 9.2 계획 vs 실제 (관측·배포)
+
+| 영역 | 계획(§2·§6) | 실제 구현 |
+|---|---|---|
+| **트레이스** | OTel Collector → (Tempo) | **Jaeger all-in-one로 직접 OTLP export**(Collector 없음). web/worker 서비스명 분리, k8s `jaeger.yaml`, in-memory 저장(데모). Tempo는 [추후] |
+| **메트릭** | Prometheus·Grafana | **kube-prometheus-stack**(Prometheus+Alertmanager+Grafana) 연동. 차트에 ServiceMonitor·PrometheusRule(`monitoring.yaml`, 토글), 배포 시 활성화 |
+| **로그** | Loki | **JSON stdout 구조만 완성, Loki는 미배포**([추후]). 필드(request_id·trace_id·job_id 등)는 Loki 연동 준비됨 |
+| **GitOps/IaC** | ArgoCD + GitHub Actions | + **Jenkins**(미러 CI) · **Terraform**(helm_release push IaC) · **PostSync smoke**(배포 후 health·metrics 검증) |
+| **배포 경로** | k3s | web=Vercel / worker·관측·보안=k3s(ArgoCD pull + Terraform push 둘 다) |
+
+실제 메트릭: `dailyproof_jobs_total`·`dailyproof_assets_total`·`dailyproof_job_processing_seconds_avg`(게이지) + `dailyproof_security_events_total`(counter). 보안 알림: `SecurityRateLimitSpike`·`SecurityForbiddenSpike`·`SecurityUnauthorizedSpike`.
+
+### 9.3 계획에 없던 추가 — 보안 (가장 크게 확장)
+
+착수 설계엔 보안이 거의 없었으나, 구현 단계에서 **예방·강제·탐지 다층 보안**을 추가했다. (상세: [security/checklist.md](../security/checklist.md), [threat-model.md](../security/threat-model.md), [admission-control.md](../security/admission-control.md))
+
+| 계층 | 통제 |
+|---|---|
+| **앱(API)** | zod 입력 검증, source_path 소유 검증(403), rate limit(grass IP 60/분·proof-assets uid 30/분, 429) |
+| **웹/응답** | Security headers(HSTS·nosniff·X-Frame·Referrer·Permissions), **CSP nonce(enforce)**, X-Powered-By 제거, cookie/CSRF(allowedOrigins) |
+| **데이터** | Storage 버킷 MIME·8MB 강제, RLS owner-only, **sealed-secrets**(암호화 커밋) |
+| **인프라(k8s)** | **NetworkPolicy** default-deny, securityContext 하드닝, **Kyverno** admission 4정책(non-root·ro-rootfs·drop ALL·latest 금지) |
+| **CI(예방)** | 보안 스캐닝 hard gate — gitleaks·trivy(CVE·IaC·secret), CodeQL(SAST)·Dependabot·SBOM |
+| **탐지** | 보안 이벤트 계측 → Prometheus 알림 firing → Alertmanager |
+
+### 9.4 계획에 없던 추가 — 운영 영역
+
+- **확장성**([scaling.md](scaling.md)): 병목 순서 분석 + web HPA(CPU)·worker KEDA(큐 깊이) 매니페스트.
+- **비용**([cost.md](cost.md)) · **백업·복구**([backup-recovery.md](../runbooks/backup-recovery.md), 복원 드릴 실측) · **롤백**([rollback.md](../runbooks/rollback.md)).
+- **CI/CD**: GitHub Actions(quality·e2e·manifests·images) + 보안 스캐닝 + Jenkins 미러 + e2e(Playwright).
+
+### 9.5 잔여·후속 (정직한 한계)
+
+- **Loki 미배포** — 로그는 stdout, 수집은 [추후].
+- **OTel Collector·Tempo** — 현재 Jaeger 직접/in-memory(데모), 운영 백엔드는 [추후].
+- **service_role 키 회전** — 과거 노출 이력(보안 작업), 회전 필요.
+- **분산 rate limit / FQDN egress / 이미지 서명(cosign) / Kyverno HA** — 단일 노드 데모 한계, 후속.
+- 트러블슈팅 과정은 `retrospective/`(회고 20편)에 서술.
