@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # 전체 히스토리까지 시크릿 스캔
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         # hard gate: 시크릿 발견 시 job 실패 → merge 차단 (continue-on-error 제거)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
