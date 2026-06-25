@@ -22,7 +22,7 @@ jobs:
     name: gitleaks (secret scan)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # 전체 히스토리까지 시크릿 스캔
       - uses: gitleaks/gitleaks-action@v2
@@ -35,7 +35,7 @@ jobs:
     name: trivy (vuln + IaC + secret)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Trivy scan → SARIF (Security 탭)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -67,7 +67,7 @@ jobs:
     name: SBOM (CycloneDX)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Generate SBOM
         uses: aquasecurity/trivy-action@v0.36.0
         with:
